@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { 
   LayoutDashboard, ClipboardCheck, Users, LogOut, Menu, X, 
   BarChart3, PieChart as PieChartIcon, Printer, FileText, 
-  History, SearchCheck, ShieldCheck, School, Briefcase, GraduationCap
+  History, SearchCheck, ShieldCheck, School, Briefcase, GraduationCap,
+  DownloadCloud
 } from 'lucide-react';
 
 import Dashboard from './Dashboard';
@@ -25,6 +26,32 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  
+  // LOGIKA PWA
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    // Tangkap event installasi dari browser
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+
+    // Hilangkan tombol jika sudah diinstall
+    window.addEventListener('appinstalled', () => {
+      setDeferredPrompt(null);
+    });
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    }
+  };
 
   const handleLoginSuccess = (data) => {
     setUserData(data);
@@ -49,7 +76,6 @@ const App = () => {
 
   if (!isLoggedIn) return <Login onLogin={handleLoginSuccess} />;
 
-  // LOGIKA ROLE
   const userRole = userData?.role?.toLowerCase();
   const isAdmin = userRole === 'admin';
   const isPiket = userRole === 'piket';
@@ -69,7 +95,7 @@ const App = () => {
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-400"><X size={24} /></button>
           </div>
 
-          <nav className="mt-6 px-4 space-y-8 overflow-y-auto max-h-[calc(100vh-200px)]">
+          <nav className="mt-6 px-4 space-y-8 overflow-y-auto max-h-[calc(100vh-250px)]">
             <div>
               <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic text-left">Main Menu</p>
               <div className="space-y-1">
@@ -85,7 +111,6 @@ const App = () => {
               </div>
             </div>
 
-            {/* Menu Piket Hanya untuk Piket dan Admin (Opsional) */}
             {isPiket && (
               <div>
                 <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic text-left">Layanan Piket</p>
@@ -104,7 +129,6 @@ const App = () => {
               </div>
             )}
 
-            {/* PERBAIKAN: Menu Laporan hanya untuk Walas (Bukan Admin) */}
             {isWalas && (
               <div className="text-left">
                 <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic">Laporan</p>
@@ -127,8 +151,18 @@ const App = () => {
             )}
           </nav>
 
-          <div className="absolute bottom-0 w-full p-6 border-t border-gray-50 bg-white">
-            <div className="flex items-center gap-3 mb-4">
+          <div className="absolute bottom-0 w-full p-6 border-t border-gray-50 bg-white space-y-3">
+            {/* TOMBOL INSTALL APLIKASI (Hanya muncul jika tersedia) */}
+            {deferredPrompt && (
+              <button 
+                onClick={handleInstallClick}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-blue-600 text-white font-bold text-[10px] hover:bg-blue-700 transition-all uppercase tracking-widest"
+              >
+                <DownloadCloud size={14} /> Install Aplikasi
+              </button>
+            )}
+
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black uppercase text-sm">{userData?.nama_lengkap?.charAt(0)}</div>
               <div className="overflow-hidden text-left">
                 <p className="text-[10px] font-black text-gray-800 truncate uppercase">{userData?.nama_lengkap}</p>
