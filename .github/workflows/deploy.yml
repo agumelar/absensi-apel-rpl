@@ -2,7 +2,7 @@ name: Deploy Otomatis Absensi
 on:
   push:
     branches:
-      - main  # Pastikan nama branch kamu memang 'main'
+      - main
 
 jobs:
   web-deploy:
@@ -29,5 +29,8 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftp
           local-dir: ./dist/
           server-dir: ./asik.smkn1rongga.sch.id/
+          state-name: .ftp-deploy-sync-state.json
