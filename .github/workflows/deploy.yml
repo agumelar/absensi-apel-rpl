@@ -1,0 +1,33 @@
+name: Deploy Otomatis Absensi
+on:
+  push:
+    branches:
+      - main  # Pastikan nama branch kamu memang 'main'
+
+jobs:
+  web-deploy:
+    name: Build dan Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil Kode Terbaru
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Project
+        run: npm run build
+
+      - name: Kirim File ke Hosting via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./asik.smkn1rongga.sch.id/
