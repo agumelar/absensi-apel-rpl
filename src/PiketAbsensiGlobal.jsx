@@ -15,9 +15,9 @@ const PiketAbsensiGlobal = () => {
   useEffect(() => {
     // 1. CEK HARI LIBUR
     const hariIni = new Date().getDay();
-    /*if (hariIni === 0 || hariIni === 6) { 
+    if (hariIni === 0 || hariIni === 6) { 
       setIsLibur(true);
-    } else */{
+    } else {
       fetchKelas();
     }
   }, []);

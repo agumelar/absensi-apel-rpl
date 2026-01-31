@@ -15,12 +15,12 @@ const HalamanAbsen = ({ user }) => {
   const [isLibur, setIsLibur] = useState(false);
 
   useEffect(() => {
-    /*const hariIni = new Date().getDay();
+    const hariIni = new Date().getDay();
     // 0 = Minggu, 6 = Sabtu
     if (hariIni === 0 || hariIni === 6) { 
       setIsLibur(true);
       setLoading(false);
-    } else */if (user) {
+    } else if (user) {
       fetchData();
     }
   }, [user]);
@@ -168,7 +168,7 @@ const HalamanAbsen = ({ user }) => {
     <div className="flex flex-col items-center justify-center p-20 text-center">
       <Coffee size={80} className="text-blue-200 mb-6" />
       <h2 className="text-2xl font-black text-gray-800 italic uppercase leading-none">Selamat Berlibur!</h2>
-      <p className="text-gray-400 font-bold text-[10px] mt-4 uppercase tracking-[0.2em]">Absensi otomatis dinonaktifkan di hari libur :D</p>
+      <p className="text-gray-400 font-bold text-[10px] mt-4 uppercase tracking-[0.2em]">Selamat Menikmati Hari Libur Anda :D</p>
     </div>
   );
 
