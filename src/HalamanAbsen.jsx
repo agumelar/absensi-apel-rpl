@@ -28,7 +28,7 @@ const HalamanAbsen = ({ user }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const tanggalHariIni = new Date().toISOString().split('T')[0];
+      const tanggalHariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
       
       // FIX 1: Gunakan kelas_id dari data user yang login
       const kelasIdTarget = user?.kelas_id;
