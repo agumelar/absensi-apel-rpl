@@ -4,14 +4,26 @@ import * as XLSX from 'xlsx';
 import { Calendar, Users, Loader2, ArrowRight, RefreshCw, FileDown, Search } from 'lucide-react';
 
 const AkumulasiSiswa = ({ user }) => {
+  // --- SUNTIKAN FIX TIMEZONE GMT+7 ---
+  const getTodayDateWIB = () => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  };
+
   const [dataAkumulasi, setDataAkumulasi] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [dariTanggal, setDariTanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [sampaiTanggal, setSampaiTanggal] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Set default tanggal ke WIB
+  const [dariTanggal, setDariTanggal] = useState(getTodayDateWIB());
+  const [sampaiTanggal, setSampaiTanggal] = useState(getTodayDateWIB());
 
   useEffect(() => {
-    if (user?.kelas_id) {
+    if (user?.kelas_id || user?.role === 'admin') {
       fetchAkumulasi();
     }
   }, [dariTanggal, sampaiTanggal, user]);
@@ -20,10 +32,8 @@ const AkumulasiSiswa = ({ user }) => {
     try {
       setLoading(true);
       
-      // FIX 1: Gunakan kelas_id (Angka) bukan teks
       const kelasIdTarget = user?.kelas_id;
 
-      // FIX 2: Query join menggunakan kelas_id
       let query = supabase
         .from('absensi')
         .select(`
@@ -40,7 +50,6 @@ const AkumulasiSiswa = ({ user }) => {
       const { data, error } = await query;
       if (error) throw error;
 
-      // MAPPING DATA: Menggunakan ID Siswa sebagai kunci
       const mapSiswa = {};
       data.forEach(item => {
         const idSiswa = item.siswa?.id;
@@ -87,11 +96,11 @@ const AkumulasiSiswa = ({ user }) => {
     const worksheet = XLSX.utils.json_to_sheet(dataExcel);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Rekap");
-    XLSX.writeFile(workbook, `Rekap_Siswa_${user?.kelas_diampu || 'Semua'}.xlsx`);
+    XLSX.writeFile(workbook, `Rekap_Siswa_${user?.kelas_diampu || 'Semua'}_${getTodayDateWIB()}.xlsx`);
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 p-4 font-sans text-gray-800">
+    <div className="max-w-6xl mx-auto pb-20 p-4 font-sans text-gray-800 text-left">
       <header className="mb-8">
         <h1 className="text-4xl font-black italic tracking-tighter uppercase text-gray-800 leading-none">Akumulasi Siswa</h1>
         <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] mt-2 uppercase">
@@ -99,7 +108,6 @@ const AkumulasiSiswa = ({ user }) => {
         </p>
       </header>
 
-      {/* SEARCH BAR */}
       <div className="relative mb-6">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
           <Search size={18} className="text-gray-400" />
@@ -109,11 +117,10 @@ const AkumulasiSiswa = ({ user }) => {
           placeholder="Cari nama siswa atau NIS..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-[25px] shadow-sm font-bold text-sm outline-none focus:border-blue-500 transition-all"
+          className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-[25px] shadow-sm font-bold text-sm outline-none focus:border-blue-500 transition-all text-left"
         />
       </div>
 
-      {/* FILTER BOX */}
       <div className="bg-white p-6 rounded-[35px] shadow-sm border border-gray-100 mb-8 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100">
           <Calendar size={18} className="text-blue-600" />
@@ -135,8 +142,7 @@ const AkumulasiSiswa = ({ user }) => {
         </div>
       </div>
 
-      {/* TABEL DATA */}
-      <div className="bg-white rounded-[40px] shadow-lg border border-gray-50 overflow-hidden">
+      <div className="bg-white rounded-[40px] shadow-lg border border-gray-50 overflow-hidden text-left">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>

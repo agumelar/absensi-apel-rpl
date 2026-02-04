@@ -19,6 +19,16 @@ const Dashboard = ({ user }) => {
 
   const isAdmin = user?.role?.toLowerCase() === 'admin';
 
+  // --- SUNTIKAN FIX TIMEZONE GMT+7 ---
+  const getTodayDateWIB = () => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  };
+
   useEffect(() => {
     if (user) fetchDashboardData();
   }, [user, filterBulan]);
@@ -26,7 +36,8 @@ const Dashboard = ({ user }) => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const hariIni = new Date().toISOString().split('T')[0];
+      // GANTI DARI new Date().toISOString() KE WIB
+      const hariIni = getTodayDateWIB();
 
       if (isAdmin) {
         const { count: u } = await supabase.from('walikelas').select('*', { count: 'exact', head: true });
@@ -41,7 +52,6 @@ const Dashboard = ({ user }) => {
           status: (aHarian || []).some(d => d.siswa?.kelas_id === kls.id)
         })));
       } else {
-        // --- LOGIKA WALAS ---
         const targetKelasId = user?.kelas_id;
         if (!targetKelasId) {
             setLoading(false);
@@ -124,7 +134,6 @@ const Dashboard = ({ user }) => {
     );
   }
 
-  // --- VIEW WALAS (Sesuai Gambar) ---
   return (
     <div className="max-w-6xl mx-auto p-4 pb-20 font-sans text-gray-800 text-left">
       <header className="mb-10">
@@ -189,7 +198,7 @@ const Dashboard = ({ user }) => {
             </div>
           </div>
           <select value={filterBulan} onChange={(e) => setFilterBulan(parseInt(e.target.value))} className="bg-gray-50 p-3 rounded-2xl text-[10px] font-black uppercase outline-none border-none cursor-pointer">
-            {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i+1}>{m}</option>)}
+            {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i+1} className="text-black">{m}</option>)}
           </select>
         </div>
 

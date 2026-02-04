@@ -4,15 +4,26 @@ import Swal from 'sweetalert2';
 import { Calendar, FileText, Image, Clock, User, Loader2, ArrowRight, RefreshCw, CheckCircle2, XCircle, Info } from 'lucide-react';
 
 const RekapAbsen = ({ user }) => {
+  // --- SUNTIKAN FIX TIMEZONE GMT+7 ---
+  const getTodayDateWIB = () => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  };
+
   const [rekap, setRekap] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dariTanggal, setDariTanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [sampaiTanggal, setSampaiTanggal] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Update state awal agar pake WIB
+  const [dariTanggal, setDariTanggal] = useState(getTodayDateWIB());
+  const [sampaiTanggal, setSampaiTanggal] = useState(getTodayDateWIB());
   
   const [counters, setCounters] = useState({ hadir: 0, sakit: 0, izin: 0, kesiangan: 0, alpha: 0 });
 
   useEffect(() => {
-    // Pastikan user sudah login dan punya kelas_id
     if (user) {
       fetchRekap();
     }
@@ -22,7 +33,6 @@ const RekapAbsen = ({ user }) => {
     try {
       setLoading(true);
       
-      // FIX 1: Gunakan kelas_id dari data user
       const kelasIdTarget = user?.kelas_id;
 
       if (!kelasIdTarget && user?.role !== 'admin') {
@@ -31,7 +41,6 @@ const RekapAbsen = ({ user }) => {
          return;
       }
 
-      // FIX 2: Query join ke siswa dengan filter kelas_id
       let query = supabase
         .from('absensi')
         .select(`
@@ -45,7 +54,6 @@ const RekapAbsen = ({ user }) => {
         .gte('tanggal', dariTanggal)
         .lte('tanggal', sampaiTanggal);
 
-      // Hanya tampilkan data milik kelas walas tersebut (berdasarkan ID)
       if (user?.role !== 'admin') {
         query = query.eq('siswa.kelas_id', kelasIdTarget);
       }
@@ -55,11 +63,9 @@ const RekapAbsen = ({ user }) => {
       
       setRekap(data || []);
       
-      // Hitung Counter otomatis
       const c = { hadir: 0, sakit: 0, izin: 0, kesiangan: 0, alpha: 0 };
       data.forEach(item => {
         const s = item.status.toLowerCase();
-        // Cek kecocokan key untuk menghindari error
         if (Object.keys(c).includes(s)) c[s]++;
       });
       setCounters(c);
@@ -82,7 +88,7 @@ const RekapAbsen = ({ user }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 p-4 font-sans text-gray-800">
+    <div className="max-w-6xl mx-auto pb-20 p-4 font-sans text-gray-800 text-left">
       <header className="mb-8">
         <h1 className="text-4xl font-black italic tracking-tighter uppercase text-gray-800">Log Detail Absensi</h1>
         <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] uppercase">
@@ -124,7 +130,7 @@ const RekapAbsen = ({ user }) => {
       </div>
 
       {/* TABEL DATA */}
-      <div className="bg-white rounded-[40px] shadow-sm border border-gray-50 overflow-hidden">
+      <div className="bg-white rounded-[40px] shadow-sm border border-gray-50 overflow-hidden text-left">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-gray-50">
@@ -144,7 +150,7 @@ const RekapAbsen = ({ user }) => {
               ) : (
                 rekap.map((row) => (
                   <tr key={row.id} className="hover:bg-blue-50/10 transition-all">
-                    <td className="p-6">
+                    <td className="p-6 text-left">
                       <p className="font-black text-gray-800 text-xs uppercase leading-tight">{row.siswa?.nama_siswa}</p>
                       <p className="text-[9px] text-gray-400 font-bold tracking-tighter uppercase font-mono">NIS: {row.siswa?.nis}</p>
                     </td>
