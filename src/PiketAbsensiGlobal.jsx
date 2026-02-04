@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import Swal from 'sweetalert2';
 import { Filter, Loader2, Clock, Image as ImageIcon, Coffee, UserCheck } from 'lucide-react';
-import { compressImage } from './utils/compressor'; // <--- Import Helper Kompresi
+import { compressImage } from './utils/compressor';
 
 const PiketAbsensiGlobal = () => {
   const [kelas, setKelas] = useState([]);
@@ -11,6 +11,16 @@ const PiketAbsensiGlobal = () => {
   const [loading, setLoading] = useState(false);
   const [absensiHariIni, setAbsensiHariIni] = useState({});
   const [isLibur, setIsLibur] = useState(false);
+
+  // --- FIX TIMEZONE GMT+7 (WIB) ---
+  const getTodayDateWIB = () => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  };
 
   useEffect(() => {
     // 1. CEK HARI LIBUR
@@ -26,7 +36,6 @@ const PiketAbsensiGlobal = () => {
     if (selectedKelas) fetchSiswaDanAbsen();
   }, [selectedKelas]);
 
-  // 1. Ambil daftar kelas dari tabel master_kelas (Bukan dari tabel siswa)
   const fetchKelas = async () => {
     try {
       const { data, error } = await supabase
@@ -41,22 +50,19 @@ const PiketAbsensiGlobal = () => {
     }
   };
 
-  // 2. Ambil Siswa berdasarkan ID Kelas yang dipilih
   const fetchSiswaDanAbsen = async () => {
     setLoading(true);
-    const hariIni = new Date().toISOString().split('T')[0];
+    const hariIni = getTodayDateWIB(); // GANTI KE WIB
     try {
-      // FIX: Query siswa berdasarkan kelas_id
       const { data: dataSiswa, error: errSiswa } = await supabase
         .from('siswa')
         .select('*')
-        .eq('kelas_id', selectedKelas) // selectedKelas sekarang isinya ID (angka)
+        .eq('kelas_id', selectedKelas)
         .eq('status_siswa', 'Aktif')
         .order('nama_siswa');
 
       if (errSiswa) throw errSiswa;
 
-      // Ambil absen harian untuk kelas tersebut
       const { data: dataAbsen, error: errAbsen } = await supabase
         .from('absensi')
         .select(`
@@ -85,7 +91,7 @@ const PiketAbsensiGlobal = () => {
   };
 
   const handleStatusClick = async (siswaId, namaSiswa, status) => {
-    const hariIni = new Date().toISOString().split('T')[0];
+    const hariIni = getTodayDateWIB(); // GANTI KE WIB
     
     let payload = { 
       siswa_id: siswaId, 
@@ -95,19 +101,13 @@ const PiketAbsensiGlobal = () => {
       bukti_url: null 
     };
 
-    // LOGIKA 1: Kesiangan (PAKSA 24 JAM)
     if (status === 'Kesiangan') {
       const { value: jam } = await Swal.fire({
         title: 'Jam Kedatangan',
         html: `
           <div class="text-left">
             <p class="text-[10px] font-black uppercase text-gray-400 mb-2">Siswa: ${namaSiswa}</p>
-            <input 
-              type="time" 
-              id="swal-input-time" 
-              class="swal2-input !m-0 !w-full" 
-              style="display: block; font-family: monospace;"
-            >
+            <input type="time" id="swal-input-time" class="swal2-input !m-0 !w-full" style="display: block; font-family: monospace;">
           </div>
         `,
         focusConfirm: false,
@@ -123,63 +123,38 @@ const PiketAbsensiGlobal = () => {
       payload.jam_hadir = jam;
     }
 
-    // LOGIKA 2: Sakit/Izin (FIX: Support Galeri + AUTO COMPRESS)
     if (status === 'Sakit' || status === 'Izin') {
       const { value: file } = await Swal.fire({
         title: `Bukti ${status}`,
         input: 'file',
         inputAttributes: { 'accept': 'image/*' }, 
-        inputLabel: `Pilih foto surat/bukti dari galeri untuk ${namaSiswa}`,
+        inputLabel: `Pilih foto surat/bukti untuk ${namaSiswa}`,
         showCancelButton: true,
         confirmButtonColor: '#2563eb'
       });
 
       if (file) {
-        // FEEDBACK VISUAL: Kasih tahu Piket kalau lagi dikompres
         Swal.fire({ title: 'Mekompres & Mengunggah...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
         try {
-          // PROSES KOMPRES OTOMATIS KE ~110KB
           const compressedFile = await compressImage(file);
-          
           const fileName = `${siswaId}-${Date.now()}.${file.name.split('.').pop()}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('bukti-absen')
-            .upload(fileName, compressedFile); // Upload file hasil kompresi
-
+          const { error: uploadError } = await supabase.storage.from('bukti-absen').upload(fileName, compressedFile);
           if (uploadError) throw uploadError;
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from('bukti-absen')
-            .getPublicUrl(fileName);
-            
+          const { data: { publicUrl } } = supabase.storage.from('bukti-absen').getPublicUrl(fileName);
           payload.bukti_url = publicUrl;
           Swal.close();
         } catch (err) {
           Swal.fire('Gagal', 'Gagal memproses gambar: ' + err.message, 'error');
           return;
         }
-      } else {
-        return; 
-      }
+      } else return;
     }
 
-    // 3. Simpan ke Database (Upsert)
     try {
-      const { error } = await supabase
-        .from('absensi')
-        .upsert(payload, { onConflict: 'siswa_id, tanggal' });
-
+      const { error } = await supabase.from('absensi').upsert(payload, { onConflict: 'siswa_id, tanggal' });
       if (error) throw error;
-
-      setAbsensiHariIni(prev => ({ 
-        ...prev, 
-        [siswaId]: { status: status, jam: payload.jam_hadir } 
-      }));
-      
+      setAbsensiHariIni(prev => ({ ...prev, [siswaId]: { status: status, jam: payload.jam_hadir } }));
       Swal.fire({ icon: 'success', title: 'Data Dikoreksi!', timer: 1000, showConfirmButton: false });
-
     } catch (err) {
       console.error(err);
       Swal.fire('Error', 'Gagal update: ' + err.message, 'error');
@@ -195,40 +170,27 @@ const PiketAbsensiGlobal = () => {
   );
 
   return (
-    <div className="max-w-5xl mx-auto p-4 pb-20 font-sans">
+    <div className="max-w-5xl mx-auto p-4 pb-20 font-sans text-left">
       <header className="mb-6">
-        <h1 className="text-3xl font-black italic uppercase text-gray-800 tracking-tighter leading-none">Koreksi Absen Global</h1>
-        <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] mt-2 uppercase">Akses Penanganan Piket Terpusat</p>
+        <h1 className="text-3xl font-black italic uppercase text-gray-800 tracking-tighter leading-none text-left">Koreksi Absen Global</h1>
+        <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] mt-2 uppercase text-left">Akses Penanganan Piket Terpusat</p>
       </header>
 
-      {/* FILTER KELAS */}
       <div className="bg-white p-5 rounded-[30px] border border-gray-100 shadow-sm mb-6">
         <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100">
           <Filter className="text-gray-400" size={18} />
-          <select 
-  className="bg-transparent outline-none font-bold text-xs text-gray-700 w-full cursor-pointer uppercase" 
-  value={selectedKelas} 
-  onChange={(e) => setSelectedKelas(e.target.value)}
->
-  <option value="">-- PILIH KELAS UNTUK KOREKSI --</option>
-  {/* FIX: Menggunakan k.id sebagai value dan k.nama_kelas sebagai label */}
-  {kelas.map(k => (
-    <option key={k.id} value={k.id}>
-      KELAS {k.nama_kelas}
-    </option>
-  ))}
-</select>
+          <select className="bg-transparent outline-none font-bold text-xs text-gray-700 w-full cursor-pointer uppercase" value={selectedKelas} onChange={(e) => setSelectedKelas(e.target.value)}>
+            <option value="">-- PILIH KELAS UNTUK KOREKSI --</option>
+            {kelas.map(k => <option key={k.id} value={k.id}>KELAS {k.nama_kelas}</option>)}
+          </select>
         </div>
       </div>
 
       {selectedKelas && (
         <div className="bg-white rounded-[35px] border border-gray-100 shadow-lg overflow-hidden">
           <div className="p-4 bg-gray-900 text-white flex justify-between items-center">
-            <span className="text-[10px] font-black uppercase tracking-widest italic">Monitoring: {selectedKelas}</span>
-            <div className="flex items-center gap-2">
-               <UserCheck size={14} className="text-blue-400" />
-               <span className="text-[8px] font-bold uppercase italic">Status Live</span>
-            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest italic">Monitoring: {kelas.find(k => k.id === parseInt(selectedKelas))?.nama_kelas}</span>
+            <div className="flex items-center gap-2"><UserCheck size={14} className="text-blue-400" /><span className="text-[8px] font-bold uppercase italic text-left">Status Live</span></div>
           </div>
 
           <div className="divide-y divide-gray-50">
@@ -238,22 +200,19 @@ const PiketAbsensiGlobal = () => {
               siswa.map((s, index) => {
                 const dataAbsen = absensiHariIni[s.id];
                 return (
-                  <div key={s.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div key={s.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
                     <div className="flex items-center gap-3 flex-1">
                       <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 font-black text-xs">{index + 1}</div>
-                      <div>
-                        <p className="text-[11px] font-black uppercase text-gray-800 leading-tight">{s.nama_siswa}</p>
+                      <div className="text-left">
+                        <p className="text-[11px] font-black uppercase text-gray-800 leading-tight text-left">{s.nama_siswa}</p>
                         <div className="flex items-center gap-2 mt-1">
-                           <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">NIS: {s.nis}</p>
+                           <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter text-left">NIS: {s.nis}</p>
                            {dataAbsen && (
-                             <span className="text-[7px] font-black bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full uppercase italic">
-                               Status Saat Ini: {dataAbsen.status} {dataAbsen.jam ? `(${dataAbsen.jam})` : ''}
-                             </span>
+                             <span className="text-[7px] font-black bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full uppercase italic">Status Saat Ini: {dataAbsen.status} {dataAbsen.jam ? `(${dataAbsen.jam})` : ''}</span>
                            )}
                         </div>
                       </div>
                     </div>
-
                     <div className="flex flex-wrap gap-1">
                       {['Hadir', 'Sakit', 'Izin', 'Alpha', 'Kesiangan'].map((status) => (
                         <button

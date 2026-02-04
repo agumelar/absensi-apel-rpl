@@ -14,9 +14,28 @@ const PiketDashboard = () => {
   const [filterKelas, setFilterKelas] = useState('Semua');
   const [daftarKelas, setDaftarKelas] = useState([]);
 
-  // TIMEZONE INDONESIA GMT+7
+  // --- LOGIKA TIMEZONE WIB SAKTI ---
   const getTodayDateWIB = () => {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    // Memaksa format YYYY-MM-DD sesuai zona Asia/Jakarta
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  };
+
+  const getStartOfTodayWIB = () => {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
+    const parts = formatter.formatToParts(now);
+    const m = {}; parts.forEach(p => m[p.type] = p.value);
+    // Menghasilkan ISO string jam 00:00:00 di Jakarta
+    return `${m.year}-${m.month}-${m.day}T00:00:00+07:00`;
   };
 
   useEffect(() => {
@@ -27,25 +46,32 @@ const PiketDashboard = () => {
     try {
       setLoading(true);
       const hariIni = getTodayDateWIB();
+      const startOfToday = getStartOfTodayWIB(); // Pake ini buat log!
 
-      // 1. AMBIL MASTER KELAS (Tanpa Join yang bikin data hilang)
+      // 1. AMBIL MASTER KELAS
       const { data: listKelasMaster } = await supabase
         .from('master_kelas')
         .select('id, nama_kelas')
         .order('nama_kelas', { ascending: true });
       setDaftarKelas(listKelasMaster || []);
 
-      // 2. AMBIL DATA WALIKELAS (Copy logika dari ExecutiveDashboard)
+      // 2. AMBIL DATA WALIKELAS
       const { data: allWalas } = await supabase.from('walikelas').select('nama_lengkap, kelas_id');
 
-      // 3. QUERY TOTAL SISWA
-      const { data: siswaData, count: totalSiswaCount } = await supabase
+      // 3. QUERY TOTAL SISWA (Dinamis sesuai Filter)
+      let querySiswa = supabase
         .from('siswa')
         .select('id, kelas_id', { count: 'exact' })
         .eq('status_siswa', 'Aktif');
+
+      if (filterKelas !== 'Semua') {
+        querySiswa = querySiswa.eq('kelas_id', parseInt(filterKelas));
+      }
+      const { data: siswaData, count: totalSiswaCount } = await querySiswa;
         
       const totalSiswaPerKelas = {};
-      siswaData?.forEach(s => {
+      const { data: allSiswa } = await supabase.from('siswa').select('id, kelas_id').eq('status_siswa', 'Aktif');
+      allSiswa?.forEach(s => {
         totalSiswaPerKelas[s.kelas_id] = (totalSiswaPerKelas[s.kelas_id] || 0) + 1;
       });
 
@@ -72,11 +98,10 @@ const PiketDashboard = () => {
         totalSiswa: totalSiswaCount || 0
       });
 
-      // 5. MONITORING KELAS (Mapping Nama Walas)
+      // 5. MONITORING KELAS
       const statusPerKelas = (listKelasMaster || []).map(k => {
         const jumlahTerabsen = dataAbsen?.filter(d => d.siswa?.kelas_id === k.id).length || 0;
-        const totalSiswa = totalSiswaPerKelas[k.id] || 0;
-        // Cari nama walikelas berdasarkan kelas_id (Logic dari ExecutiveDashboard)
+        const totalSiswaDiKelasIni = totalSiswaPerKelas[k.id] || 0;
         const walasFound = allWalas?.find(w => w.kelas_id === k.id)?.nama_lengkap || 'Belum Diatur';
         
         return {
@@ -84,23 +109,22 @@ const PiketDashboard = () => {
           nama: k.nama_kelas,
           walas: walasFound,
           terabsen: jumlahTerabsen,
-          total: totalSiswa,
-          isComplete: jumlahTerabsen >= totalSiswa && totalSiswa > 0
+          total: totalSiswaDiKelasIni,
+          isComplete: jumlahTerabsen >= totalSiswaDiKelasIni && totalSiswaDiKelasIni > 0
         };
       });
 
-      // Filter list kelas yang tampil jika ada filter terpilih
       const finalMonitoring = filterKelas === 'Semua' 
         ? statusPerKelas 
         : statusPerKelas.filter(k => k.id === parseInt(filterKelas));
         
       setMonitoringKelas(finalMonitoring);
 
-      // 6. LOG PIKET (Hanya hari ini)
+      // 6. LOG PIKET (Pake startOfToday Jakarta)
       let queryLog = supabase
         .from('log_piket')
         .select(`*, siswa!inner (nama_siswa, kelas_id, master_kelas (nama_kelas))`)
-        .gte('created_at', hariIni)
+        .gte('created_at', startOfToday) // <--- PENTING: Pake GMT+7 Offset
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -122,6 +146,7 @@ const PiketDashboard = () => {
     }
   };
 
+  // ... (Sisa kode ke bawah sama kayak punya lo)
   const COLORS = { Hadir: '#10b981', Terlambat: '#facc15', Sakit: '#f59e0b', Izin: '#3b82f6', Alpha: '#ef4444' };
   const chartData = [
     { name: 'Hadir', value: stats.hadir },
@@ -142,8 +167,8 @@ const PiketDashboard = () => {
     <div className="max-w-6xl mx-auto p-4 pb-20 font-sans">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 text-gray-800 text-left">
         <div className="text-left">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none text-left">Piket Control Room</h1>
-          <p className="text-[10px] font-bold text-blue-600 tracking-[0.3em] uppercase mt-2 text-left">Live Monitoring Dashboard</p>
+          <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none">Piket Control Room</h1>
+          <p className="text-[10px] font-bold text-blue-600 tracking-[0.3em] uppercase mt-2">Live Monitoring Dashboard</p>
         </div>
         
         <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-sm border border-gray-100 w-full md:w-auto">
@@ -169,27 +194,29 @@ const PiketDashboard = () => {
         <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
           <CheckCircle size={20} className="text-green-500 mb-2" />
           <h2 className="text-3xl font-black">{stats.hadir}</h2>
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Hadir</p>
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Hadir</p>
         </div>
         <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
           <Clock size={20} className="text-amber-500 mb-2" />
           <h2 className="text-3xl font-black">{stats.terlambat}</h2>
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Telat</p>
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Telat</p>
         </div>
         <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
-          <Info size={20} className="text-orange-500 mb-2" />
+          <div className="flex items-center justify-center mb-2">
+            <Info size={20} className="text-orange-500" />
+          </div>
           <h2 className="text-3xl font-black">{stats.sakit}</h2>
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Sakit</p>
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Sakit</p>
         </div>
         <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
           <TrendingUp size={20} className="text-blue-600 mb-2" />
           <h2 className="text-3xl font-black">{stats.izin}</h2>
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Izin</p>
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Izin</p>
         </div>
         <div className="bg-red-600 p-6 rounded-[35px] text-white shadow-lg flex flex-col items-center">
           <AlertCircle size={20} className="mb-2 opacity-50" />
           <h2 className="text-3xl font-black">{stats.alpha}</h2>
-          <p className="text-[9px] font-black uppercase tracking-widest opacity-80">Alpha</p>
+          <p className="text-[9px] font-black uppercase tracking-widest opacity-80 text-center">Alpha</p>
         </div>
       </div>
 
@@ -237,12 +264,15 @@ const PiketDashboard = () => {
           ) : (
             recentLogs.map((log, i) => (
               <div key={i} className="p-5 bg-white/5 rounded-[30px] border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-all group">
-                <div>
-                  <p className="text-[10px] font-black uppercase leading-tight mb-1 truncate text-white">{log.siswa_nama}</p>
-                  <p className="text-[8px] text-blue-400 font-bold uppercase italic">{log.jenis_log}</p>
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase leading-tight mb-1 truncate text-white text-left">{log.siswa_nama}</p>
+                  <p className="text-[8px] text-blue-400 font-bold uppercase italic text-left">{log.jenis_log}</p>
                 </div>
                 <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-end">
-                  <p className="text-[8px] font-black text-gray-500 uppercase">{new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                  <div>
+                    <p className="text-[8px] font-black text-gray-500 uppercase">{new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                    <p className="text-[7px] text-gray-600 font-bold uppercase italic">{log.siswa_kelas}</p>
+                  </div>
                   <CheckCircle size={12} className="text-blue-500 opacity-50 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>
