@@ -38,11 +38,12 @@ const ExecutiveDashboard = ({ user }) => {
   const isGlobalAccess = ['kepsek', 'kesiswaan', 'admin'].includes(userRole);
 
   useEffect(() => { fetchInitialData(); }, []);
+  // EWS dan data lainnya akan update saat filter jurusan/kelas berubah
   useEffect(() => { fetchExecutiveData(); }, [filterKelas, filterBulan, filterJurusan, filterTanggalMonitoring, modeAkumulasi, dariTgl, sampaiTgl, activeTab]);
 
   const fetchInitialData = async () => {
     try {
-      const { data: jurs } = await supabase.from('master_jurusan').select('*');
+      const { data: jurs } = await supabase.from('master_jurusan').select('*').order('nama_jurusan');
       setMasterJurusan(jurs || []);
     } catch (e) { console.error(e); }
   };
@@ -51,7 +52,6 @@ const ExecutiveDashboard = ({ user }) => {
     try {
       setLoading(true);
       
-      // LOGIKA RANGE TANGGAL UNTUK AKUMULASI & EWS
       let tglAwal, tglAkhir;
       if (modeAkumulasi === 'hari') {
         tglAwal = getTodayDateWIB();
@@ -65,28 +65,34 @@ const ExecutiveDashboard = ({ user }) => {
         tglAkhir = `${tahunIni}-${String(filterBulan).padStart(2, '0')}-${lastDay}`;
       }
 
+      // 1. QUERY MASTER KELAS BERDASARKAN AKSES
       let queryKelas = supabase.from('master_kelas').select('id, nama_kelas, jurusan_id');
-      if (isKaprog) queryKelas = queryKelas.eq('jurusan_id', parseInt(user?.jurusan_id || 0));
-      else if (isGlobalAccess && filterJurusan !== 'Semua') queryKelas = queryKelas.eq('jurusan_id', parseInt(filterJurusan));
-      const { data: mKelas } = await queryKelas;
+      
+      if (isKaprog) {
+        queryKelas = queryKelas.eq('jurusan_id', parseInt(user?.jurusan_id || 0));
+      } else if (isGlobalAccess && filterJurusan !== 'Semua') {
+        queryKelas = queryKelas.eq('jurusan_id', parseInt(filterJurusan));
+      }
+      
+      const { data: mKelas } = await queryKelas.order('nama_kelas');
       setDaftarKelas(mKelas || []);
       const listKelasIds = (mKelas || []).map(k => k.id);
 
+      // 2. DATA SISWA & ABSENSI
       const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_siswa, kelas_id, master_kelas(nama_kelas)').eq('status_siswa', 'Aktif');
       const { data: allWalas } = await supabase.from('walikelas').select('nama_lengkap, kelas_id');
+      
+      // Siswa terfilter berdasarkan akses jurusan/kelas
       const siswaTerfilter = (dataSiswa || []).filter(s => listKelasIds.includes(s.kelas_id));
 
       const { data: dataAbsenHarian } = await supabase.from('absensi').select('*').eq('tanggal', filterTanggalMonitoring);
-      
-      // Ambil data absen range untuk tabel akumulasi & pembinaan
-      const targetIdsForQuery = siswaTerfilter.map(s => s.id);
       const { data: dataAbsenRange } = await supabase.from('absensi')
         .select('status, siswa_id')
         .gte('tanggal', tglAwal)
         .lte('tanggal', tglAkhir)
-        .in('siswa_id', targetIdsForQuery.length > 0 ? targetIdsForQuery : [0]);
+        .in('siswa_id', siswaTerfilter.length > 0 ? siswaTerfilter.map(s => s.id) : [0]);
 
-      // --- LOGIKA MONITORING ---
+      // --- MONITORING ---
       const targetSiswaIdsMon = (filterKelas === 'Semua') ? siswaTerfilter.map(s => s.id) : siswaTerfilter.filter(s => s.kelas_id === parseInt(filterKelas)).map(s => s.id);
       const harianFinal = (dataAbsenHarian || []).filter(a => targetSiswaIdsMon.includes(a.siswa_id));
       const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Kesiangan: 0 };
@@ -104,8 +110,8 @@ const ExecutiveDashboard = ({ user }) => {
         masalah: (dataAbsenHarian || []).filter(a => (dataSiswa || []).filter(s => s.kelas_id === k.id).map(s => s.id).includes(a.siswa_id) && ['Alpha', 'Kesiangan'].includes(a.status)).length
       })).sort((a, b) => b.masalah - a.masalah).slice(0, 8));
 
-      // --- LOGIKA AKUMULASI & EWS (Sesuai tglAwal/tglAkhir filter) ---
-      const rekapAkumulasiRaw = (filterKelas === 'Semua' ? siswaTerfilter : siswaTerfilter.filter(s => s.kelas_id === parseInt(filterKelas))).map(s => {
+      // --- AKUMULASI & EWS ---
+      const rekapAkumulasiRaw = siswaTerfilter.map(s => {
         const absenSiswa = (dataAbsenRange || []).filter(a => a.siswa_id === s.id);
         const h = absenSiswa.filter(a => a.status === 'Hadir').length;
         const s_ = absenSiswa.filter(a => a.status === 'Sakit').length;
@@ -115,11 +121,15 @@ const ExecutiveDashboard = ({ user }) => {
         return { 
           nama: s.nama_siswa, 
           kelas: s.master_kelas?.nama_kelas || '---', 
+          kelas_id: s.kelas_id,
           hadir: h, sakit: s_, izin: i, alpha: a, telat: k, total: h+s_+i+a+k 
         };
       });
 
-      setDataAkumulasi(rekapAkumulasiRaw.sort((a, b) => a.nama.localeCompare(b.nama)));
+      const finalAkumulasi = (filterKelas === 'Semua') ? rekapAkumulasiRaw : rekapAkumulasiRaw.filter(r => r.kelas_id === parseInt(filterKelas));
+      setDataAkumulasi(finalAkumulasi.sort((a, b) => a.nama.localeCompare(b.nama)));
+      
+      // EWS Selalu Mengacu pada daftar siswa yang sedang aktif difilter (Jurusan/Kelas)
       setEwsSiswa(rekapAkumulasiRaw.filter(s => s.alpha > 2 || s.telat > 3).sort((a, b) => b.alpha - a.alpha));
 
     } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -153,10 +163,22 @@ const ExecutiveDashboard = ({ user }) => {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
+            {/* FILTER JURUSAN (KHUSUS GLOBAL ACCESS) */}
+            {isGlobalAccess && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-2xl border border-white/10 bg-white/5">
+                <Building size={14} className="text-blue-500" />
+                <select value={filterJurusan} onChange={(e) => { setFilterJurusan(e.target.value); setFilterKelas('Semua'); }} className="bg-transparent outline-none text-[10px] font-black uppercase cursor-pointer">
+                  <option value="Semua" className="text-black">SEMUA JURUSAN</option>
+                  {masterJurusan.map(j => <option key={j.id} value={j.id} className="text-black">{j.kode_jurusan || j.nama_jurusan}</option>)}
+                </select>
+              </div>
+            )}
+
             <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border border-white/10 bg-white/5 ${activeTab === 'akumulasi' ? 'hidden' : ''}`}>
               <Calendar size={14} className="text-blue-500" />
               <input type="date" value={filterTanggalMonitoring} onChange={(e) => setFilterTanggalMonitoring(e.target.value)} className="bg-transparent outline-none text-[10px] font-black uppercase cursor-pointer" />
             </div>
+
             <div className="flex items-center gap-2 px-4 py-2 rounded-2xl border border-white/10 bg-white/5">
               <Filter size={14} className="text-blue-500" />
               <select value={filterKelas} onChange={(e) => setFilterKelas(e.target.value)} className="bg-transparent outline-none text-[10px] font-black uppercase cursor-pointer">
@@ -172,6 +194,7 @@ const ExecutiveDashboard = ({ user }) => {
 
         {activeTab === 'monitoring' ? (
           <div className="space-y-6 animate-in fade-in duration-500">
+            {/* STATS AREA */}
             <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               {[
                 { l: 'Siswa', v: stats.Total, c: 'text-blue-500', i: <Users size={20}/> },
@@ -205,34 +228,36 @@ const ExecutiveDashboard = ({ user }) => {
                     </ResponsiveContainer>
                  </div>
                </div>
+               
                <div className="p-8 rounded-[45px] bg-red-500/5 border border-red-500/20 max-h-[410px] overflow-y-auto">
                  <h3 className="text-[10px] font-black uppercase mb-6 text-red-500 flex items-center gap-2 italic tracking-widest text-left"><AlertTriangle size={16} /> Belum Absen</h3>
                  <div className="space-y-3">
                    {warningWalas.length === 0 ? <p className="text-[10px] font-bold opacity-30 italic text-center py-10">Semua kelas sudah absen 🌿</p> : warningWalas.map((w, i) => (
                      <div key={i} className="p-4 rounded-2xl bg-white/5 flex justify-between items-center border border-white/5">
-                       <div className="text-left"><p className="text-[10px] font-black uppercase leading-tight text-left">{w.nama}</p><p className="text-[8px] font-bold opacity-40 uppercase mt-1 italic text-left">{w.walas}</p></div>
+                       <div className="text-left"><p className="text-[10px] font-black uppercase leading-tight">{w.nama}</p><p className="text-[8px] font-bold opacity-40 uppercase mt-1 italic text-left">{w.walas}</p></div>
                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></div>
                      </div>
                    ))}
                  </div>
                </div>
 
-               {/* EARLY WARNING SYSTEM (EWS) DENGAN FILTER BULAN */}
                <div className="lg:col-span-3 p-8 rounded-[45px] bg-white/5 border border-white/10">
                  <div className="flex justify-between items-center mb-8">
                    <div className="flex items-center gap-3">
                      <div className="p-2 bg-red-500/20 rounded-xl text-red-500"><AlertTriangle size={20}/></div>
-                     <div className="text-left"><h3 className="text-[10px] font-black uppercase tracking-widest text-red-500 text-left">Target Pembinaan Siswa</h3><p className="text-[8px] font-bold opacity-40 uppercase mt-1 italic tracking-widest text-left">Siswa Alpha {'>'} 2 atau Telat {'>'} 3 (Bulan Ini)</p></div>
+                     <div className="text-left"><h3 className="text-[10px] font-black uppercase tracking-widest text-red-500">Target Pembinaan Siswa</h3><p className="text-[8px] font-bold opacity-40 uppercase mt-1 italic tracking-widest">Siswa Alpha {'>'} 2 atau Telat {'>'} 3 (Bulan Ini)</p></div>
                    </div>
-                   {/* FILTER BULAN UNTUK EWS */}
                    <select value={filterBulan} onChange={(e) => setFilterBulan(parseInt(e.target.value))} className="bg-white/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase border-none outline-none text-white border border-white/10 cursor-pointer">
                      {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i+1} className="text-black">{m}</option>)}
                    </select>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-left">
                    {ewsSiswa.length === 0 ? <div className="col-span-4 py-10 text-center opacity-30 font-black italic uppercase text-xs">Siswa terpantau disiplin 🌿</div> : ewsSiswa.map((s, i) => (
-                     <div key={i} className="p-5 rounded-[25px] bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex flex-col">
-                       <div className="flex gap-1 mb-3">{s.alpha > 2 && <span className="px-2 py-1 bg-red-600 text-white text-[8px] font-black rounded-md">{s.alpha} Alpha</span>}{s.telat > 3 && <span className="px-2 py-1 bg-yellow-500 text-white text-[8px] font-black rounded-md">{s.telat} Telat</span>}</div>
+                     <div key={i} className="p-5 rounded-[25px] bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex flex-col text-left">
+                       <div className="flex gap-1 mb-3">
+                         {s.alpha > 2 && <span className="px-2 py-1 bg-red-600 text-white text-[8px] font-black rounded-md">{s.alpha} Alpha</span>}
+                         {s.telat > 3 && <span className="px-2 py-1 bg-yellow-500 text-white text-[8px] font-black rounded-md">{s.telat} Telat</span>}
+                       </div>
                        <p className="text-[10px] font-black uppercase leading-tight text-left">{s.nama}</p><p className="text-[7px] font-bold opacity-30 mt-1 uppercase tracking-widest italic text-left">{s.kelas}</p>
                      </div>
                    ))}
@@ -241,12 +266,12 @@ const ExecutiveDashboard = ({ user }) => {
             </div>
           </div>
         ) : (
-          /* AKUMULASI AREA DENGAN SEARCH & FILTER */
-          <div className="bg-white/5 p-8 rounded-[45px] border border-white/10 shadow-xl animate-in fade-in duration-500 text-left">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 text-left">
+          /* AKUMULASI AREA */
+          <div className="bg-white/5 p-8 rounded-[45px] border border-white/10 shadow-xl animate-in fade-in duration-500">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
                <div className="text-left">
-                 <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-500 text-left">Tabel Rekap Akumulasi</h3>
-                 <p className="text-[8px] font-bold opacity-40 uppercase mt-1 italic tracking-widest text-left">Mode: {modeAkumulasi.toUpperCase()}</p>
+                 <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Tabel Rekap Akumulasi</h3>
+                 <p className="text-[8px] font-bold opacity-40 uppercase mt-1 italic tracking-widest">Mode: {modeAkumulasi.toUpperCase()}</p>
                </div>
 
                <div className="flex-1 max-w-sm w-full">
