@@ -47,7 +47,36 @@ const ManajemenSiswa = () => {
     }
   };
 
-  // FUNGSI SIMPAN MANUAL (TAMBAH & EDIT)
+  // --- FITUR BARU: EXCEL EXPORT (NIS, NAMA, KELAS) ---
+  const handleExportSiswa = () => {
+    if (filteredSiswa.length === 0) {
+      return Swal.fire('Oops', 'Tidak ada data untuk diexport', 'warning');
+    }
+
+    // Mapping data sesuai permintaan: NIS, Nama, Kelas
+    const dataExcel = filteredSiswa.map((s, index) => ({
+      "No": index + 1,
+      "NIS": s.nis || '-',
+      "Nama Siswa": s.nama_siswa,
+      "Kelas": s.master_kelas?.nama_kelas || 'Tanpa Kelas'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataExcel);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Master Siswa");
+    
+    const fileName = `Data_Siswa_Export_${new Date().toLocaleDateString('id-ID')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    
+    Swal.fire({
+      icon: 'success',
+      title: 'Export Berhasil!',
+      text: `${filteredSiswa.length} data telah diunduh.`,
+      timer: 1500,
+      showConfirmButton: false
+    });
+  };
+
   const handleSaveManual = async () => {
     if (!formData.nama_siswa || !formData.kelas_id) {
       return Swal.fire('Oops', 'Nama dan Kelas wajib diisi!', 'warning');
@@ -55,7 +84,6 @@ const ManajemenSiswa = () => {
     
     try {
       Swal.fire({ title: 'Menyimpan...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      
       const payload = { 
         nis: formData.nis,
         nama_siswa: formData.nama_siswa.toUpperCase(),
@@ -65,17 +93,14 @@ const ManajemenSiswa = () => {
 
       let error;
       if (formData.id) {
-        // JIKA ADA ID = UPDATE (EDIT)
         const { error: err } = await supabase.from('siswa').update(payload).eq('id', formData.id);
         error = err;
       } else {
-        // JIKA TIDAK ADA ID = INSERT (BARU)
         const { error: err } = await supabase.from('siswa').insert([payload]);
         error = err;
       }
 
       if (error) throw error;
-
       Swal.fire('Berhasil!', 'Data siswa telah diperbarui.', 'success');
       setIsAddingManual(false);
       setFormData({ id: null, nis: '', nama_siswa: '', kelas_id: '', status_siswa: 'Aktif' });
@@ -101,7 +126,6 @@ const ManajemenSiswa = () => {
     }
   };
 
-  // FUNGSI IMPORT EXCEL
   const handleImportSiswa = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -136,7 +160,6 @@ const ManajemenSiswa = () => {
     reader.readAsBinaryString(file);
   };
 
-  // AKSI MASSAL (NAIK KELAS / LULUS)
   const handleBulkAction = async () => {
     if (!selectedKelas) return;
     const { value: action } = await Swal.fire({
@@ -174,7 +197,7 @@ const ManajemenSiswa = () => {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-white' : 'bg-gray-50 text-slate-800'} p-4 md:p-8 font-sans`}>
       
-      <header className="max-w-6xl mx-auto mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+      <header className="max-w-6xl mx-auto mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 text-left">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-4xl font-black italic uppercase tracking-tighter">Database Siswa</h1>
@@ -186,6 +209,11 @@ const ManajemenSiswa = () => {
         </div>
         
         <div className="flex flex-wrap gap-2">
+          {/* TOMBOL EXPORT BARU */}
+          <button onClick={handleExportSiswa} className="bg-green-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase shadow-lg shadow-green-200">
+            <Download size={16} /> Export
+          </button>
+
           {selectedKelas && (
             <button onClick={handleBulkAction} className="bg-orange-500 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase shadow-lg shadow-orange-200">
               <ArrowUpCircle size={16} /> Aksi Massal
@@ -196,7 +224,7 @@ const ManajemenSiswa = () => {
           </button>
           <label className="bg-blue-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase shadow-lg shadow-blue-200 cursor-pointer">
             {isImporting ? <Loader2 className="animate-spin" size={16} /> : <FileUp size={16} />}
-            Excel
+            Import
             <input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleImportSiswa} />
           </label>
         </div>
