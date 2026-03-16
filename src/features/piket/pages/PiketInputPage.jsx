@@ -43,20 +43,54 @@ const PiketInput = () => {
   };
 
   const submitLayanan = async (jenis) => {
-    if (!selectedSiswa || !namaPiket) return Swal.fire('Oops', 'Lengkapi data!', 'warning');
-    const { value: alasan } = await Swal.fire({ title: `Alasan ${jenis}`, input: 'textarea', confirmButtonColor: '#2563eb' });
-    if (alasan) {
-      try {
-        setLoading(true);
-        await createLogPiket({
-          siswaId: selectedSiswa.id,
-          jenisLog: jenis,
-          alasan,
-          namaPiket,
-        });
-        handlePrint({ nama_siswa: selectedSiswa.nama_siswa, kelas: selectedSiswa.kelas_nama, jenis: jenis, alasan: alasan, piket: namaPiket });
-        setSelectedSiswa(null); setSearchTerm('');
-      } finally { setLoading(false); }
+    const namaPiketTrimmed = namaPiket.trim();
+    if (!selectedSiswa || !namaPiketTrimmed) {
+      return Swal.fire('Oops', 'Lengkapi petugas piket dan pilih siswa dulu.', 'warning');
+    }
+
+    const { value: alasan } = await Swal.fire({
+      title: `Alasan ${jenis}`,
+      input: 'textarea',
+      inputPlaceholder: 'Tulis alasan layanan...',
+      showCancelButton: true,
+      confirmButtonText: 'Simpan',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#2563eb',
+      inputValidator: (value) => (!value?.trim() ? 'Alasan wajib diisi.' : undefined),
+    });
+
+    if (!alasan) return;
+
+    const alasanTrimmed = alasan.trim();
+    try {
+      setLoading(true);
+      await createLogPiket({
+        siswaId: selectedSiswa.id,
+        jenisLog: jenis,
+        alasan: alasanTrimmed,
+        namaPiket: namaPiketTrimmed,
+      });
+      handlePrint({
+        nama_siswa: selectedSiswa.nama_siswa,
+        kelas: selectedSiswa.kelas_nama,
+        jenis,
+        alasan: alasanTrimmed,
+        piket: namaPiketTrimmed,
+      });
+      await Swal.fire({
+        icon: 'success',
+        title: 'Berhasil',
+        text: `${jenis} berhasil dicatat.`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      setSelectedSiswa(null);
+      setSearchTerm('');
+    } catch (error) {
+      console.error('Gagal membuat log piket:', error);
+      await Swal.fire('Gagal menyimpan', error?.message || 'Terjadi kesalahan saat menyimpan log piket.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,9 +137,9 @@ const PiketInput = () => {
             <div className="text-left"><h2 className="text-sm font-black uppercase text-gray-800 leading-tight">{selectedSiswa.nama_siswa}</h2><p className="text-[10px] font-black text-blue-500 uppercase mt-1">Siswa Terpilih • {selectedSiswa.kelas_nama}</p></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <button onClick={() => submitLayanan('Izin Keluar')} className="bg-amber-50 text-amber-600 flex flex-col items-center p-6 rounded-[30px] font-black"><Clock size={24}/><span className="text-[9px] mt-3 uppercase tracking-widest text-center">Izin Keluar</span></button>
-            <button onClick={() => submitLayanan('Izin Pulang')} className="bg-red-50 text-red-600 flex flex-col items-center p-6 rounded-[30px] font-black"><LogOut size={24}/><span className="text-[9px] mt-3 uppercase tracking-widest text-center">Izin Pulang</span></button>
-            <button onClick={() => submitLayanan('Izin Masuk')} className="bg-blue-50 text-blue-600 flex flex-col items-center p-6 rounded-[30px] font-black"><Printer size={24}/><span className="text-[9px] mt-3 uppercase tracking-widest text-center">Izin Masuk</span></button>
+            <button disabled={loading} onClick={() => submitLayanan('Izin Keluar')} className="bg-amber-50 text-amber-600 flex flex-col items-center p-6 rounded-[30px] font-black disabled:opacity-60 disabled:cursor-not-allowed"><Clock size={24}/><span className="text-[9px] mt-3 uppercase tracking-widest text-center">Izin Keluar</span></button>
+            <button disabled={loading} onClick={() => submitLayanan('Izin Pulang')} className="bg-red-50 text-red-600 flex flex-col items-center p-6 rounded-[30px] font-black disabled:opacity-60 disabled:cursor-not-allowed"><LogOut size={24}/><span className="text-[9px] mt-3 uppercase tracking-widest text-center">Izin Pulang</span></button>
+            <button disabled={loading} onClick={() => submitLayanan('Izin Masuk')} className="bg-blue-50 text-blue-600 flex flex-col items-center p-6 rounded-[30px] font-black disabled:opacity-60 disabled:cursor-not-allowed"><Printer size={24}/><span className="text-[9px] mt-3 uppercase tracking-widest text-center">Izin Masuk</span></button>
           </div>
         </div>
       )}
