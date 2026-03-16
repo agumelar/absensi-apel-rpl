@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from '../../../supabaseClient';
 import Swal from 'sweetalert2';
 import { Calendar, FileText, Image, Clock, User, Loader2, ArrowRight, RefreshCw, CheckCircle2, XCircle, Info } from 'lucide-react';
 

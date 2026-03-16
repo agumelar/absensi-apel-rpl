@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Login from './Login';
-import PublicMonitoring from './PublicMonitoring';
+import Login from './features/auth/pages/LoginPage';
+import PublicMonitoring from './features/monitoring/pages/PublicMonitoringPage';
 import AppShell from './app/AppShell';
 import AppRoutes from './routes/AppRoutes';
 import RequireAuth from './routes/guards/RequireAuth';

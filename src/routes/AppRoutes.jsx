@@ -1,19 +1,19 @@
 import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
-import Dashboard from '../Dashboard';
-import ExecutiveDashboard from '../ExecutiveDashboard';
-import PiketDashboard from '../PiketDashboard';
-import PiketInput from '../PiketInput';
-import RekapPiket from '../RekapPiket';
-import PiketAbsensiGlobal from '../PiketAbsensiGlobal';
-import HalamanAbsen from '../HalamanAbsen';
-import RekapAbsen from '../RekapAbsen';
-import AkumulasiSiswa from '../AkumulasiSiswa';
-import ManajemenSiswa from '../ManajemenSiswa';
-import ManajemenUser from '../ManajemenUser';
-import PublicMonitoring from '../PublicMonitoring';
-import ManajemenKelas from '../ManajemenKelas';
+import Dashboard from '../features/dashboard/pages/DashboardPage';
+import ExecutiveDashboard from '../features/dashboard/pages/ExecutiveDashboardPage';
+import PiketDashboard from '../features/piket/pages/PiketDashboardPage';
+import PiketInput from '../features/piket/pages/PiketInputPage';
+import RekapPiket from '../features/piket/pages/RekapPiketPage';
+import PiketAbsensiGlobal from '../features/piket/pages/PiketAbsensiGlobalPage';
+import HalamanAbsen from '../features/absensi/pages/HalamanAbsenPage';
+import RekapAbsen from '../features/absensi/pages/RekapAbsenPage';
+import AkumulasiSiswa from '../features/absensi/pages/AkumulasiSiswaPage';
+import ManajemenSiswa from '../features/admin/pages/ManajemenSiswaPage';
+import ManajemenUser from '../features/admin/pages/ManajemenUserPage';
+import PublicMonitoring from '../features/monitoring/pages/PublicMonitoringPage';
+import ManajemenKelas from '../features/admin/pages/ManajemenKelasPage';
 import RequireRole from './guards/RequireRole';
 import { DASHBOARD_ROUTE } from '../shared/constants/routes';
 

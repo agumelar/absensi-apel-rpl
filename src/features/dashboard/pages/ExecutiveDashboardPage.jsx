@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from '../../../supabaseClient';
 import { 
   TrendingUp, AlertTriangle, Users, ShieldCheck, 
   Loader2, Sun, Moon, CheckCircle, Info, Clock, BarChart3, Filter, 

@@ -4,13 +4,13 @@ import {
   User, Loader2, Clock, CheckCircle, 
   Image as ImageIcon, Eye, Coffee 
 } from 'lucide-react';
-import { compressImage } from './utils/compressor'; 
+import { compressImage } from '../../../shared/utils/compressor'; 
 import {
   fetchAbsensiByTanggal,
   fetchActiveStudentsByKelas,
   upsertBulkAbsensi,
-} from './services/absensiService';
-import { uploadBuktiAbsen } from './services/supabase/storageService';
+} from '../../../services/absensiService';
+import { uploadBuktiAbsen } from '../../../services/supabase/storageService';
 
 const HalamanAbsen = ({ user }) => {
   const [siswa, setSiswa] = useState([]);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from '../../../supabaseClient';
 import * as XLSX from 'xlsx'; // Pastikan sudah install: npm install xlsx
 import { 
   UserPlus, Trash2, Edit3, User, Loader2, X, Save, Fingerprint, FileUp, Download

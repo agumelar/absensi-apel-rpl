@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from '../../../supabaseClient';
 import * as XLSX from 'xlsx';
 import Swal from 'sweetalert2';
 import { 

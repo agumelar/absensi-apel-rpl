@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Printer, Loader2 } from 'lucide-react';
-import { fetchPiketLogByTanggal } from './services/piketService';
-import { printPiketReceipt } from './services/piketPrintService';
+import { fetchPiketLogByTanggal } from '../../../services/piketService';
+import { printPiketReceipt } from '../../../services/piketPrintService';
 
 const RekapPiket = () => {
   const [logs, setLogs] = useState([]);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from '../../../supabaseClient';
 import { 
   Plus, Trash2, Loader2, X, Save, School, Filter 
 } from 'lucide-react';

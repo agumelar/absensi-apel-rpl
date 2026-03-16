@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { Search, User, Printer, Clock, ArrowRight, Loader2, LogOut } from 'lucide-react';
-import { createLogPiket, fetchMasterKelas, searchSiswaAktif } from './services/piketService';
-import { printPiketReceipt } from './services/piketPrintService';
+import { createLogPiket, fetchMasterKelas, searchSiswaAktif } from '../../../services/piketService';
+import { printPiketReceipt } from '../../../services/piketPrintService';
 
 const PiketInput = () => {
   const [searchTerm, setSearchTerm] = useState('');

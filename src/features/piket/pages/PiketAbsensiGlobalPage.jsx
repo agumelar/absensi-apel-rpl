@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { Filter, Loader2, Clock, Image as ImageIcon, Coffee, UserCheck } from 'lucide-react';
-import { compressImage } from './utils/compressor';
-import { getTodayDateWIB } from './services/shared/dateService';
-import { fetchMasterKelas } from './services/piketService';
+import { compressImage } from '../../../shared/utils/compressor';
+import { getTodayDateWIB } from '../../../services/shared/dateService';
+import { fetchMasterKelas } from '../../../services/piketService';
 import {
   fetchAbsensiByTanggalDanKelas,
   fetchActiveStudentsByKelas,
   upsertAbsensi,
-} from './services/absensiService';
-import { uploadBuktiAbsen } from './services/supabase/storageService';
+} from '../../../services/absensiService';
+import { uploadBuktiAbsen } from '../../../services/supabase/storageService';
 
 const PiketAbsensiGlobal = () => {
   const [kelas, setKelas] = useState([]);
