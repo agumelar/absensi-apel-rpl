@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
 import Swal from 'sweetalert2';
 import { 
   User, Loader2, Clock, CheckCircle, 
   Image as ImageIcon, Eye, Coffee 
 } from 'lucide-react';
 import { compressImage } from './utils/compressor'; 
+import {
+  fetchAbsensiByTanggal,
+  fetchActiveStudentsByKelas,
+  upsertBulkAbsensi,
+} from './services/absensiService';
+import { uploadBuktiAbsen } from './services/supabase/storageService';
 
 const HalamanAbsen = ({ user }) => {
   const [siswa, setSiswa] = useState([]);
@@ -40,28 +45,10 @@ const HalamanAbsen = ({ user }) => {
       }
 
       // FIX 2: Query siswa berdasarkan kelas_id (bukan teks 'kelas')
-      const { data: dataSiswa, error: errSiswa } = await supabase
-        .from('siswa')
-        .select('*')
-        .eq('kelas_id', kelasIdTarget) // <--- Sesuai database baru
-        .eq('status_siswa', 'Aktif')   // <--- Hanya yang aktif
-        .order('nama_siswa', { ascending: true });
-      
-      if (errSiswa) throw errSiswa;
+      const dataSiswa = await fetchActiveStudentsByKelas(kelasIdTarget);
 
       // FIX 3: Query absensi hari ini dengan relasi yang benar
-      const { data: dataAbsen, error: errAbsen } = await supabase
-      .from('absensi')
-      .select(`
-        siswa_id, 
-        status, 
-        bukti_url, 
-        jam_hadir
-      `)
-      .eq('tanggal', tanggalHariIni);
-        //.eq('siswa.kelas_id', kelasIdTarget); // <--- Filter absen per kelas ID
-
-      if (errAbsen) throw errAbsen;
+      const dataAbsen = await fetchAbsensiByTanggal(tanggalHariIni);
 
       const mapAbsen = {};
       dataAbsen.forEach(item => {
@@ -109,14 +96,8 @@ const HalamanAbsen = ({ user }) => {
           const compressedFile = await compressImage(file);
           const fileName = `${status}-${siswaId}-${Date.now()}.jpg`;
           
-          const { error: upErr } = await supabase.storage
-            .from('bukti-absen')
-            .upload(fileName, compressedFile);
-
-          if (upErr) throw upErr;
-
-          const { data: urlData } = supabase.storage.from('bukti-absen').getPublicUrl(fileName);
-          setAbsensi({ ...absensi, [siswaId]: { status, bukti_url: urlData.publicUrl } });
+          const publicUrl = await uploadBuktiAbsen(fileName, compressedFile);
+          setAbsensi({ ...absensi, [siswaId]: { status, bukti_url: publicUrl } });
           Swal.close();
         } catch (err) {
           Swal.fire('Gagal', 'Gagal memproses gambar: ' + err.message, 'error');
@@ -140,11 +121,7 @@ const HalamanAbsen = ({ user }) => {
       }));
 
       // Pake upsert biar kalo ada perubahan (re-absen) bisa update otomatis
-      const { error } = await supabase
-        .from('absensi')
-        .upsert(dataSiapSimpan, { onConflict: 'siswa_id, tanggal' });
-        
-      if (error) throw error;
+      await upsertBulkAbsensi(dataSiapSimpan);
 
       await Swal.fire({ icon: 'success', title: 'Absensi Tersimpan!', confirmButtonColor: '#2563eb', timer: 1000, showConfirmButton: false });
       setAbsensi({});

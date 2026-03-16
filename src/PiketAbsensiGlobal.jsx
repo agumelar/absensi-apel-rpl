@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
 import Swal from 'sweetalert2';
 import { Filter, Loader2, Clock, Image as ImageIcon, Coffee, UserCheck } from 'lucide-react';
 import { compressImage } from './utils/compressor';
+import { getTodayDateWIB } from './services/shared/dateService';
+import { fetchMasterKelas } from './services/piketService';
+import {
+  fetchAbsensiByTanggalDanKelas,
+  fetchActiveStudentsByKelas,
+  upsertAbsensi,
+} from './services/absensiService';
+import { uploadBuktiAbsen } from './services/supabase/storageService';
 
 const PiketAbsensiGlobal = () => {
   const [kelas, setKelas] = useState([]);
@@ -11,16 +18,6 @@ const PiketAbsensiGlobal = () => {
   const [loading, setLoading] = useState(false);
   const [absensiHariIni, setAbsensiHariIni] = useState({});
   const [isLibur, setIsLibur] = useState(false);
-
-  // --- FIX TIMEZONE GMT+7 (WIB) ---
-  const getTodayDateWIB = () => {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Jakarta',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  };
 
   useEffect(() => {
     // 1. CEK HARI LIBUR
@@ -38,13 +35,8 @@ const PiketAbsensiGlobal = () => {
 
   const fetchKelas = async () => {
     try {
-      const { data, error } = await supabase
-        .from('master_kelas')
-        .select('id, nama_kelas')
-        .order('nama_kelas', { ascending: true });
-      
-      if (error) throw error;
-      setKelas(data || []);
+      const data = await fetchMasterKelas();
+      setKelas(data);
     } catch (err) {
       console.error("Gagal ambil master kelas:", err.message);
     }
@@ -54,27 +46,10 @@ const PiketAbsensiGlobal = () => {
     setLoading(true);
     const hariIni = getTodayDateWIB(); // GANTI KE WIB
     try {
-      const { data: dataSiswa, error: errSiswa } = await supabase
-        .from('siswa')
-        .select('*')
-        .eq('kelas_id', selectedKelas)
-        .eq('status_siswa', 'Aktif')
-        .order('nama_siswa');
-
-      if (errSiswa) throw errSiswa;
-
-      const { data: dataAbsen, error: errAbsen } = await supabase
-        .from('absensi')
-        .select(`
-          siswa_id, 
-          status, 
-          jam_hadir,
-          siswa!inner(kelas_id)
-        `)
-        .eq('tanggal', hariIni)
-        .eq('siswa.kelas_id', selectedKelas);
-
-      if (errAbsen) throw errAbsen;
+      const [dataSiswa, dataAbsen] = await Promise.all([
+        fetchActiveStudentsByKelas(selectedKelas),
+        fetchAbsensiByTanggalDanKelas(hariIni, selectedKelas),
+      ]);
 
       const mapping = {};
       dataAbsen?.forEach(a => { 
@@ -138,10 +113,7 @@ const PiketAbsensiGlobal = () => {
         try {
           const compressedFile = await compressImage(file);
           const fileName = `${siswaId}-${Date.now()}.${file.name.split('.').pop()}`;
-          const { error: uploadError } = await supabase.storage.from('bukti-absen').upload(fileName, compressedFile);
-          if (uploadError) throw uploadError;
-          const { data: { publicUrl } } = supabase.storage.from('bukti-absen').getPublicUrl(fileName);
-          payload.bukti_url = publicUrl;
+          payload.bukti_url = await uploadBuktiAbsen(fileName, compressedFile);
           Swal.close();
         } catch (err) {
           Swal.fire('Gagal', 'Gagal memproses gambar: ' + err.message, 'error');
@@ -151,8 +123,7 @@ const PiketAbsensiGlobal = () => {
     }
 
     try {
-      const { error } = await supabase.from('absensi').upsert(payload, { onConflict: 'siswa_id, tanggal' });
-      if (error) throw error;
+      await upsertAbsensi(payload);
       setAbsensiHariIni(prev => ({ ...prev, [siswaId]: { status: status, jam: payload.jam_hadir } }));
       Swal.fire({ icon: 'success', title: 'Data Dikoreksi!', timer: 1000, showConfirmButton: false });
     } catch (err) {

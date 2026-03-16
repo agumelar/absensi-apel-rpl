@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
 import Swal from 'sweetalert2';
 import { Search, User, Printer, Clock, ArrowRight, Loader2, LogOut } from 'lucide-react';
+import { createLogPiket, fetchMasterKelas, searchSiswaAktif } from './services/piketService';
+import { printPiketReceipt } from './services/piketPrintService';
 
-const PiketInput = ({ user }) => {
+const PiketInput = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [siswaFound, setSiswaFound] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -16,8 +17,8 @@ const PiketInput = ({ user }) => {
 
   const fetchKelas = async () => {
     try {
-      const { data } = await supabase.from('master_kelas').select('id, nama_kelas').order('nama_kelas');
-      setDaftarKelas(data || []);
+      const data = await fetchMasterKelas();
+      setDaftarKelas(data);
     } catch (err) { console.error(err); }
   };
 
@@ -25,78 +26,20 @@ const PiketInput = ({ user }) => {
     if (!searchTerm && !filterKelas) return;
     setLoading(true);
     try {
-      let query = supabase.from('siswa').select(`*, master_kelas (nama_kelas)`).eq('status_siswa', 'Aktif');
-      if (filterKelas) query = query.eq('kelas_id', filterKelas);
-      if (searchTerm) query = query.ilike('nama_siswa', `%${searchTerm}%`);
-      const { data } = await query.limit(40);
+      const data = await searchSiswaAktif({ searchTerm, filterKelas, limit: 40 });
       setSiswaFound(data.map(s => ({ ...s, kelas_nama: s.master_kelas?.nama_kelas || '---' })));
     } finally { setLoading(false); }
   };
 
   const handlePrint = (logData) => {
-    const tgl = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-
-    const content = `
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            * { box-sizing: border-box; }
-            body { margin: 0; padding: 0; font-family: monospace; width: 100%; background: #fff; color: #000; }
-            .wrapper { width: 85%; margin: 0 auto; padding: 10px 0; }
-            #btnCetak { width: 90%; margin: 15px auto; display: block; padding: 15px; background: #000; color: #fff; border: none; font-weight: bold; border-radius: 10px; font-size: 14px; cursor: pointer; }
-            .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px; margin-bottom: 15px; }
-            .info-box { font-size: 13px; margin-bottom: 10px; }
-            .label { font-size: 10px; color: #666; text-transform: uppercase; margin-top: 8px; }
-            .val { font-weight: 900; font-size: 16px; display: block; text-transform: uppercase; }
-            .footer { margin-top: 25px; text-align: center; border-top: 1px dashed #000; padding-top: 15px; }
-            .ttd-box { margin-top: 10px; height: 60px; border-bottom: 1px dotted #000; width: 140px; margin-left: auto; margin-right: auto; }
-          </style>
-        </head>
-        <body>
-          <button id="btnCetak" onclick="mulaiPrint()">CETAK STRUK SEKARANG</button>
-          
-          <div class="wrapper">
-            <div class="header">
-              <div style="font-size: 18px; font-weight: 900;">SMK N 1 RONGGA</div>
-              <div style="font-size: 10px;">Sistem Layanan Terpadu</div>
-            </div>
-            <div class="info-box">
-              <div style="text-align: center; font-weight: 900; font-size: 14px; text-decoration: underline; margin-bottom: 15px;">SURAT IZIN SISWA</div>
-              <div style="font-weight: bold; margin-bottom: 10px;">
-                TANGGAL: ${tgl}<br>
-                WAKTU  : ${jam} WIB
-              </div>
-              <div class="label">Nama Siswa:</div><span class="val">${logData.nama_siswa}</span>
-              <div class="label">Kelas:</div><span class="val">${logData.kelas}</span>
-              <div class="label">Layanan:</div><span class="val">${logData.jenis}</span>
-              <div class="label">Keterangan:</div><div style="font-weight: bold; font-style: italic; font-size: 13px; margin-top: 5px;">"${logData.alasan}"</div>
-            </div>
-            <div class="footer">
-              <div style="font-size: 11px;">Petugas Piket,</div>
-              <div class="ttd-box"></div>
-              <div style="font-weight: 900; font-size: 14px; margin-top: 8px;">( ${logData.piket.toUpperCase()} )</div>
-            </div>
-          </div>
-
-          <script>
-            function mulaiPrint() {
-              const btn = document.getElementById('btnCetak');
-              btn.style.display = 'none'; // Sembunyikan total
-              window.print();
-              setTimeout(() => {
-                btn.style.display = 'block'; // Munculin lagi setelah 1 detik
-              }, 1000);
-            }
-          </script>
-        </body>
-      </html>
-    `;
-
-    const printWindow = window.open('about:blank', '_blank');
-    printWindow.document.write(content);
-    printWindow.document.close();
+    printPiketReceipt({
+      namaSiswa: logData.nama_siswa,
+      kelas: logData.kelas,
+      jenis: logData.jenis,
+      alasan: logData.alasan,
+      namaPiket: logData.piket,
+      isDuplicate: false,
+    });
   };
 
   const submitLayanan = async (jenis) => {
@@ -105,7 +48,12 @@ const PiketInput = ({ user }) => {
     if (alasan) {
       try {
         setLoading(true);
-        await supabase.from('log_piket').insert([{ siswa_id: selectedSiswa.id, jenis_log: jenis, alasan: alasan, nama_piket: namaPiket }]);
+        await createLogPiket({
+          siswaId: selectedSiswa.id,
+          jenisLog: jenis,
+          alasan,
+          namaPiket,
+        });
         handlePrint({ nama_siswa: selectedSiswa.nama_siswa, kelas: selectedSiswa.kelas_nama, jenis: jenis, alasan: alasan, piket: namaPiket });
         setSelectedSiswa(null); setSearchTerm('');
       } finally { setLoading(false); }
