@@ -3,6 +3,9 @@ import Swal from 'sweetalert2';
 import { Search, User, Printer, Clock, ArrowRight, Loader2, LogOut } from 'lucide-react';
 import { createLogPiket, fetchMasterKelas, searchSiswaAktif } from '../../../services/piketService';
 import { printPiketReceipt } from '../../../services/piketPrintService';
+import Button from '../../../shared/ui/Button';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
 const PiketInput = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,23 +98,23 @@ const PiketInput = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 pb-20 font-sans text-left">
-      <header className="mb-6">
-        <h1 className="text-3xl font-black italic uppercase text-gray-800 tracking-tighter leading-none text-left">Layanan Piket</h1>
-        <p className="text-blue-600 font-bold text-[9px] tracking-[0.3em] mt-2 uppercase text-left">SMK Negeri 1 Rongga</p>
-      </header>
+    <PageContainer className="max-w-4xl pb-20">
+      <PageHeader className="mb-6 block">
+        <PageTitle className="text-3xl italic uppercase">Layanan Piket</PageTitle>
+        <PageSubtitle className="mt-2">SMK Negeri 1 Rongga</PageSubtitle>
+      </PageHeader>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-[30px] border border-gray-100 shadow-sm text-left">
+        <Card className="rounded-[30px]"><CardContent className="p-5">
           <label className="text-[8px] font-black uppercase text-gray-400 mb-2 block tracking-widest text-left">Petugas Meja Piket</label>
           <input type="text" placeholder="Nama Anda..." className="w-full bg-blue-50/50 p-4 rounded-2xl font-black text-xs outline-none border border-blue-100 uppercase" value={namaPiket} onChange={(e) => setNamaPiket(e.target.value)} />
-        </div>
-        <div className="bg-white p-5 rounded-[30px] border border-gray-100 shadow-sm text-left">
+        </CardContent></Card>
+        <Card className="rounded-[30px]"><CardContent className="p-5">
           <label className="text-[8px] font-black uppercase text-gray-400 mb-2 block tracking-widest text-left">Filter per Kelas</label>
           <select className="w-full bg-gray-50 p-4 rounded-2xl font-black text-xs outline-none border border-gray-100 cursor-pointer uppercase" value={filterKelas} onChange={(e) => setFilterKelas(e.target.value)}>
             <option value="">-- SEMUA KELAS --</option>
             {daftarKelas.map(k => <option key={k.id} value={k.id}>KELAS {k.nama_kelas}</option>)}
           </select>
-        </div>
+        </CardContent></Card>
       </div>
       <div className="bg-gray-900 p-6 rounded-[40px] shadow-2xl mb-6 text-white text-left">
         <div className="flex gap-2 mb-6">
@@ -119,7 +122,7 @@ const PiketInput = () => {
             <Search className="text-gray-400" size={18} />
             <input type="text" placeholder="Cari Nama Siswa..." className="bg-transparent outline-none font-bold text-xs w-full uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyUp={(e) => e.key === 'Enter' && handleSearch()} />
           </div>
-          <button onClick={handleSearch} className="bg-blue-600 px-8 py-3 rounded-2xl font-black text-[10px] uppercase">{loading ? <Loader2 className="animate-spin" size={16} /> : 'CARI'}</button>
+          <Button onClick={handleSearch} className="px-8 text-[10px] uppercase">{loading ? <Loader2 className="animate-spin" size={16} /> : 'CARI'}</Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {siswaFound.map((s) => (
@@ -143,7 +146,7 @@ const PiketInput = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 };
 

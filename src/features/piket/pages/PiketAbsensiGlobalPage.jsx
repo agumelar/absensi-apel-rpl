@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { Filter, Loader2, Clock, Image as ImageIcon, Coffee, UserCheck } from 'lucide-react';
 import { compressImage } from '../../../shared/utils/compressor';
@@ -29,10 +29,6 @@ const PiketAbsensiGlobal = () => {
     }
   }, []);
 
-  useEffect(() => {
-    if (selectedKelas) fetchSiswaDanAbsen();
-  }, [selectedKelas]);
-
   const fetchKelas = async () => {
     try {
       const data = await fetchMasterKelas();
@@ -42,7 +38,7 @@ const PiketAbsensiGlobal = () => {
     }
   };
 
-  const fetchSiswaDanAbsen = async () => {
+  const fetchSiswaDanAbsen = useCallback(async () => {
     setLoading(true);
     const hariIni = getTodayDateWIB(); // GANTI KE WIB
     try {
@@ -63,7 +59,11 @@ const PiketAbsensiGlobal = () => {
     } finally { 
       setLoading(false); 
     }
-  };
+  }, [selectedKelas]);
+
+  useEffect(() => {
+    if (selectedKelas) fetchSiswaDanAbsen();
+  }, [fetchSiswaDanAbsen, selectedKelas]);
 
   const handleStatusClick = async (siswaId, namaSiswa, status) => {
     const hariIni = getTodayDateWIB(); // GANTI KE WIB

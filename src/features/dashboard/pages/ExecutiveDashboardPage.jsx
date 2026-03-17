@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { 
   TrendingUp, AlertTriangle, Users, ShieldCheck, 
-  Loader2, Sun, Moon, CheckCircle, Info, Clock, BarChart3, Filter, 
+  Loader2, CheckCircle, Info, Clock, BarChart3, Filter, 
   Calendar, Download, Building, ArrowRight, Search, Trophy, Sparkles
 } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
-import * as XLSX from 'xlsx';
+import { exportJsonToExcel } from '../../../services/shared/excelService';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
 const ExecutiveDashboard = ({ user }) => {
   const [activeTab, setActiveTab] = useState('monitoring');
-  const [darkMode, setDarkMode] = useState(true);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Kesiangan: 0, Total: 0 });
   
@@ -36,10 +36,9 @@ const ExecutiveDashboard = ({ user }) => {
 
   const userRole = user?.role?.toLowerCase();
   const isKaprog = userRole === 'kaprog';
-  const isGlobalAccess = ['kepsek', 'kesiswaan', 'admin'].includes(userRole);
+  const isGlobalAccess = ['kepsek', 'kesiswaan', 'kurikulum'].includes(userRole);
 
   useEffect(() => { fetchInitialData(); }, []);
-  useEffect(() => { fetchExecutiveData(); }, [filterKelas, filterBulan, filterJurusan, filterTanggalMonitoring, modeAkumulasi, dariTgl, sampaiTgl, activeTab]);
 
   const fetchInitialData = async () => {
     try {
@@ -66,7 +65,7 @@ const ExecutiveDashboard = ({ user }) => {
     return allData;
   };
 
-  const fetchExecutiveData = async () => {
+  const fetchExecutiveData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -108,7 +107,9 @@ const ExecutiveDashboard = ({ user }) => {
       const targetSiswaIdsMon = (filterKelas === 'Semua') ? siswaTerfilter.map(s => s.id) : siswaTerfilter.filter(s => s.kelas_id === parseInt(filterKelas)).map(s => s.id);
       const harianFinal = (dataAbsenHarian || []).filter(a => targetSiswaIdsMon.includes(a.siswa_id));
       const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Kesiangan: 0 };
-      harianFinal.forEach(a => { if(counts.hasOwnProperty(a.status)) counts[a.status]++ });
+      harianFinal.forEach(a => {
+        if (Object.prototype.hasOwnProperty.call(counts, a.status)) counts[a.status]++;
+      });
       setStats({ ...counts, Total: targetSiswaIdsMon.length });
 
       setWarningWalas((mKelas || []).map(k => ({
@@ -167,7 +168,22 @@ const ExecutiveDashboard = ({ user }) => {
       }
 
     } catch (err) { console.error(err); } finally { setLoading(false); }
-  };
+  }, [
+    activeTab,
+    dariTgl,
+    filterBulan,
+    filterJurusan,
+    filterKelas,
+    filterTanggalMonitoring,
+    isGlobalAccess,
+    isKaprog,
+    modeAkumulasi,
+    sampaiTgl,
+    tahunIni,
+    user?.jurusan_id,
+  ]);
+
+  useEffect(() => { fetchExecutiveData(); }, [fetchExecutiveData]);
 
   const filteredDataAkumulasi = dataAkumulasi.filter(item => 
     item.nama.toLowerCase().includes(searchTerm.toLowerCase())
@@ -184,26 +200,29 @@ const ExecutiveDashboard = ({ user }) => {
       "T": d.telat || 0,
       "Total": d.total || d.count || 0 
     }));
-    const ws = XLSX.utils.json_to_sheet(dataExcel);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Rekap");
-    XLSX.writeFile(wb, `Rekap_${activeTab}_${getTodayDateWIB()}.xlsx`);
+    exportJsonToExcel({
+      rows: dataExcel,
+      sheetName: 'Rekap',
+      fileName: `Rekap_${activeTab}_${getTodayDateWIB()}.xlsx`,
+    });
   };
 
-  if (loading) return <div className="h-screen bg-gray-950 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" size={40} /></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" size={40} /></div>;
 
   return (
-    <div className={`min-h-screen transition-all duration-500 ${darkMode ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}`}>
-      <div className="max-w-7xl mx-auto p-6 pb-20 text-left">
-        
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 text-left">
+    <PageContainer className="max-w-7xl pb-20">
+      <div className="min-h-screen transition-all duration-500">
+        <PageHeader className="mb-8">
           <div className="flex flex-col gap-2">
              <div className="flex items-center gap-4 bg-white/5 p-1 rounded-2xl border border-white/10 w-fit">
                 <button onClick={() => setActiveTab('monitoring')} className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === 'monitoring' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Monitoring</button>
                 <button onClick={() => setActiveTab('weekly')} className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === 'weekly' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Weekly</button>
                 <button onClick={() => setActiveTab('akumulasi')} className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === 'akumulasi' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Akumulasi</button>
              </div>
-             <h1 className="text-3xl font-black italic uppercase tracking-tighter mt-2">{activeTab === 'weekly' ? 'Jumat Insight' : activeTab === 'akumulasi' ? 'Rekap Akumulasi' : 'Radar Control'}</h1>
+             <PageTitle className="mt-2 text-3xl italic uppercase">
+               {activeTab === 'weekly' ? 'Jumat Insight' : activeTab === 'akumulasi' ? 'Rekap Akumulasi' : 'Radar Control'}
+             </PageTitle>
+             <PageSubtitle>Executive Visibility</PageSubtitle>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
@@ -227,11 +246,8 @@ const ExecutiveDashboard = ({ user }) => {
                 {daftarKelas.map(k => <option key={k.id} value={k.id} className="text-black">{k.nama_kelas}</option>)}
               </select>
             </div>
-            <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-white/5 border border-white/10 rounded-2xl transition-all hover:bg-white/10">
-              {darkMode ? <Sun size={20} className="text-yellow-400"/> : <Moon size={20}/>}
-            </button>
           </div>
-        </header>
+        </PageHeader>
 
         {activeTab === 'monitoring' && (
           <div className="space-y-6 animate-in fade-in duration-500 text-left">
@@ -362,7 +378,7 @@ const ExecutiveDashboard = ({ user }) => {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

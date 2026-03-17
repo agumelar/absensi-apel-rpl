@@ -1,10 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
-import * as XLSX from 'xlsx'; // Pastikan sudah install: npm install xlsx
 import { 
-  UserPlus, Trash2, Edit3, User, Loader2, X, Save, Fingerprint, FileUp, Download
+  UserPlus, Trash2, Edit3, User, Loader2, X, Save, Fingerprint, FileUp
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { readExcelFileToJson } from '../../../services/shared/excelService';
+import Button from '../../../shared/ui/Button';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import InputField from '../../../shared/ui/InputField';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
+
+const toBooleanFlag = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return ['1', 'true', 't', 'yes', 'y'].includes(normalized);
+  }
+
+  return false;
+};
+
+const ALLOWED_ROLES = ['guru', 'walikelas', 'walas', 'piket', 'admin', 'kaprog', 'kepsek', 'kesiswaan', 'kurikulum'];
+
+const normalizeAllowedRole = (role) => {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (!normalized) return 'guru';
+  return ALLOWED_ROLES.includes(normalized) ? normalized : 'guru';
+};
 
 const ManajemenUser = () => {
   const [users, setUsers] = useState([]);
@@ -19,8 +42,9 @@ const ManajemenUser = () => {
     username: '',
     password: '',
     nama_lengkap: '',
-    role: 'walikelas',
-    kelas_id: ''
+    role: 'guru',
+    kelas_id: '',
+    is_guru_mapel: false,
   });
 
   useEffect(() => {
@@ -49,70 +73,65 @@ const ManajemenUser = () => {
   const handleImportUser = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      Swal.fire('Format tidak didukung', 'Gunakan file .xlsx untuk import user.', 'warning');
+      return;
+    }
 
     setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const dataExcel = XLSX.utils.sheet_to_json(ws);
+    try {
+      const dataExcel = await readExcelFileToJson(file);
 
-        let finalData = [];
-        let errorLog = [];
+      let finalData = [];
+      let errorLog = [];
 
-        dataExcel.forEach((row, index) => {
-          const roleRaw = row.role?.toLowerCase().trim() || 'walikelas';
-          const namaKelasRaw = row.kelas?.toString().trim().toUpperCase();
-          
-          // Cari Match Kelas
-          const klsMatch = kelas.find(k => k.nama_kelas.trim().toUpperCase() === namaKelasRaw);
+      dataExcel.forEach((row, index) => {
+        const roleRaw = normalizeAllowedRole(row.role);
+        const namaKelasRaw = row.kelas?.toString().trim().toUpperCase();
+        const isGuruMapelRaw = toBooleanFlag(row.is_guru_mapel ?? row.guru_mapel ?? false);
+        
+        const klsMatch = kelas.find(k => k.nama_kelas.trim().toUpperCase() === namaKelasRaw);
 
-          // VALIDASI: Kalau Walikelas tapi kelasnya gak ketemu di database
-          if ((roleRaw === 'walikelas' || roleRaw === 'walas') && !klsMatch) {
-            errorLog.push(`Baris ${index + 2}: Kelas "${namaKelasRaw}" tidak ditemukan di Master Kelas`);
-          } else {
-            finalData.push({
-              username: row.username?.toString().toLowerCase().trim(),
-              password: row.password?.toString() || 'Jingga123',
-              nama_lengkap: row.nama_lengkap?.toUpperCase().trim(),
-              role: roleRaw,
-              kelas_id: klsMatch ? klsMatch.id : null,
-              kelas_diampu: klsMatch ? klsMatch.nama_kelas : null, // Ini sekarang aman karena SQL di atas
-            });
-          }
-        });
-
-        // Kalau ada error typo nama kelas, stop & kasih tau user
-        if (errorLog.length > 0) {
-          setIsImporting(false);
-          return Swal.fire({
-            title: 'Typo Nama Kelas!',
-            html: `<div class="text-left text-[10px] bg-red-50 p-3 rounded-xl font-mono text-red-600">
-                    ${errorLog.join('<br/>')}
-                   </div>`,
-            icon: 'error'
+        if ((roleRaw === 'walikelas' || roleRaw === 'walas') && !klsMatch) {
+          errorLog.push(`Baris ${index + 2}: Kelas "${namaKelasRaw}" tidak ditemukan di Master Kelas`);
+        } else {
+          finalData.push({
+            username: row.username?.toString().toLowerCase().trim(),
+            password: row.password?.toString() || 'Jingga123',
+            nama_lengkap: row.nama_lengkap?.toUpperCase().trim(),
+            role: roleRaw,
+            kelas_id: klsMatch ? klsMatch.id : null,
+            kelas_diampu: klsMatch ? klsMatch.nama_kelas : null,
+            is_guru_mapel: isGuruMapelRaw,
           });
         }
+      });
 
-        const { error } = await supabase.from('walikelas').upsert(finalData, { onConflict: 'username' });
-        if (error) throw error;
-
-        Swal.fire('Berhasil!', `${finalData.length} akun diproses.`, 'success');
-        fetchInitialData();
-      } catch (err) {
-        Swal.fire('Gagal!', err.message, 'error');
-      } finally {
-        setIsImporting(false);
-        e.target.value = null;
+      if (errorLog.length > 0) {
+        return Swal.fire({
+          title: 'Typo Nama Kelas!',
+          html: `<div class="text-left text-[10px] bg-red-50 p-3 rounded-xl font-mono text-red-600">
+                  ${errorLog.join('<br/>')}
+                 </div>`,
+          icon: 'error'
+        });
       }
-    };
-    reader.readAsBinaryString(file);
+
+      const { error } = await supabase.from('walikelas').upsert(finalData, { onConflict: 'username' });
+      if (error) throw error;
+
+      Swal.fire('Berhasil!', `${finalData.length} akun diproses.`, 'success');
+      fetchInitialData();
+    } catch (err) {
+      Swal.fire('Gagal!', err.message, 'error');
+    } finally {
+      setIsImporting(false);
+      e.target.value = null;
+    }
   };
 
   const handleSave = async () => {
-    const { username, password, nama_lengkap, role, kelas_id } = formData;
+    const { username, password, nama_lengkap, role, kelas_id, is_guru_mapel } = formData;
     if (!username || !nama_lengkap) return Swal.fire('Oops', 'Data wajib diisi', 'warning');
 
     try {
@@ -123,6 +142,7 @@ const ManajemenUser = () => {
         password,
         nama_lengkap: nama_lengkap.toUpperCase(),
         role,
+        is_guru_mapel: Boolean(is_guru_mapel),
         kelas_id: (role === 'walas' || role === 'walikelas') ? parseInt(kelas_id) : null,
         kelas_diampu: (role === 'walas' || role === 'walikelas') ? kelas.find(k => k.id == kelas_id)?.nama_kelas : null
       };
@@ -148,14 +168,22 @@ const ManajemenUser = () => {
       username: u.username || '',
       password: u.password || '',
       nama_lengkap: u.nama_lengkap || '',
-      role: u.role || 'walikelas',
-      kelas_id: u.kelas_id || ''
-    });
+      role: normalizeAllowedRole(u.role),
+        kelas_id: u.kelas_id || '',
+        is_guru_mapel: toBooleanFlag(u.is_guru_mapel),
+      });
   };
 
   const handleCancel = () => {
     setIsAdding(false); setIsEditing(false); setCurrentId(null);
-    setFormData({ username: '', password: '', nama_lengkap: '', role: 'walikelas', kelas_id: '' });
+    setFormData({
+      username: '',
+      password: '',
+      nama_lengkap: '',
+      role: 'guru',
+      kelas_id: '',
+      is_guru_mapel: false,
+    });
   };
 
   const handleDelete = async (id) => {
@@ -167,26 +195,27 @@ const ManajemenUser = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 font-sans text-gray-800">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+    <PageContainer>
+      <PageHeader>
         <div>
-          <h1 className="text-3xl font-black italic uppercase text-gray-800 tracking-tighter leading-none">Manajemen Akun</h1>
-          <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] mt-2 uppercase">Total {users.length} Pengguna Terdaftar</p>
+          <PageTitle className="text-3xl italic uppercase">Manajemen Akun</PageTitle>
+          <PageSubtitle className="mt-2">Total {users.length} pengguna terdaftar</PageSubtitle>
         </div>
         <div className="flex gap-2">
-          <label className="bg-gray-100 text-gray-600 px-5 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase cursor-pointer hover:bg-gray-200 transition-all">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
             {isImporting ? <Loader2 className="animate-spin" size={16} /> : <FileUp size={16} />}
             Import Excel
-            <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleImportUser} />
+            <input type="file" className="hidden" accept=".xlsx" onChange={handleImportUser} />
           </label>
-          <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase shadow-lg shadow-blue-200">
+          <Button onClick={() => setIsAdding(true)} size="md" className="text-xs uppercase">
             <UserPlus size={16} /> Tambah Manual
-          </button>
+          </Button>
         </div>
-      </header>
+      </PageHeader>
 
       {isAdding && (
-        <div className="bg-white p-8 rounded-[40px] border border-blue-100 shadow-xl mb-10 animate-in fade-in zoom-in duration-300">
+        <Card className="mb-10 rounded-3xl animate-in fade-in zoom-in duration-300">
+          <CardContent className="p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="font-black uppercase text-sm italic">{isEditing ? 'Ubah Akun' : 'Akun Baru'}</h2>
             <button onClick={handleCancel} className="p-2 bg-red-50 text-red-500 rounded-full"><X size={18} /></button>
@@ -194,17 +223,11 @@ const ManajemenUser = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Nama Lengkap</label>
-              <div className="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl">
-                <User size={18} className="text-gray-400" />
-                <input type="text" className="bg-transparent outline-none w-full font-bold text-xs uppercase" value={formData.nama_lengkap} onChange={(e)=>setFormData({...formData, nama_lengkap: e.target.value})} />
-              </div>
+              <InputField icon={User} type="text" className="px-4 py-3" value={formData.nama_lengkap} onChange={(e)=>setFormData({...formData, nama_lengkap: e.target.value})} />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Username</label>
-              <div className="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl">
-                <Fingerprint size={18} className="text-gray-400" />
-                <input type="text" className="bg-transparent outline-none w-full font-bold text-xs" value={formData.username} onChange={(e)=>setFormData({...formData, username: e.target.value})} />
-              </div>
+              <InputField icon={Fingerprint} type="text" className="px-4 py-3" value={formData.username} onChange={(e)=>setFormData({...formData, username: e.target.value})} />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Password</label>
@@ -212,12 +235,39 @@ const ManajemenUser = () => {
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Role</label>
-              <select className="w-full bg-blue-50 text-blue-600 rounded-2xl px-4 py-3 text-xs font-black uppercase outline-none" value={formData.role} onChange={(e)=>setFormData({...formData, role: e.target.value})}>
+              <select
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase text-slate-700 outline-none focus:border-blue-500"
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              >
                 <option value="walikelas">Wali Kelas</option>
+                <option value="guru">Guru</option>
                 <option value="piket">Piket</option>
                 <option value="admin">Admin</option>
                 <option value="kaprog">Kaprog</option>
+                <option value="kepsek">Kepsek</option>
+                <option value="kesiswaan">Kesiswaan</option>
+                <option value="kurikulum">Kurikulum</option>
               </select>
+            </div>
+
+            <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="flex cursor-pointer items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wide text-slate-600">
+                    Aktifkan Akses Guru Mapel
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-400">
+                    Jika aktif, akun ini bisa masuk workspace mapel sesuai logic V2.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-blue-600"
+                  checked={Boolean(formData.is_guru_mapel)}
+                  onChange={(e) => setFormData({ ...formData, is_guru_mapel: e.target.checked })}
+                />
+              </label>
             </div>
 
             {(formData.role === 'walas' || formData.role === 'walikelas') && (
@@ -230,25 +280,31 @@ const ManajemenUser = () => {
               </div>
             )}
           </div>
-          <button onClick={handleSave} className="w-full mt-8 bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2">
+          <Button onClick={handleSave} size="lg" className="w-full mt-8 text-xs uppercase">
              <Save size={18} /> {isEditing ? 'Simpan Perubahan' : 'Buat Akun Sekarang'}
-          </button>
-        </div>
+          </Button>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
-        <table className="w-full text-left">
+      <Card className="rounded-3xl overflow-hidden">
+        <table className="premium-table text-left">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-              <th className="p-6">Pengguna</th>
-              <th className="p-6 text-center">Jabatan</th>
-              <th className="p-6">Akses Kelas</th>
-              <th className="p-6 text-right">Aksi</th>
+            <tr className="border-b border-gray-100">
+              <th>Pengguna</th>
+              <th className="text-center">Jabatan</th>
+              <th>Akses Kelas</th>
+              <th className="text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading ? (
-              <tr><td colSpan="4" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></td></tr>
+              <tr>
+                <td colSpan="4" className="p-16 text-center">
+                  <Loader2 className="animate-spin mx-auto text-blue-600 mb-3" />
+                  <span className="micro-loading">Memuat data pengguna...</span>
+                </td>
+              </tr>
             ) : users.map((u) => (
               <tr key={u.id} className="hover:bg-blue-50/20 transition-all group">
                 <td className="p-6">
@@ -256,7 +312,14 @@ const ManajemenUser = () => {
                   <p className="text-[10px] text-gray-400 font-bold font-mono">{u.username}</p>
                 </td>
                 <td className="p-6 text-center">
-                  <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[8px] font-black uppercase italic">{u.role}</span>
+                  <div className="inline-flex flex-col items-center gap-1">
+                    <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[8px] font-black uppercase italic">{u.role}</span>
+                    {toBooleanFlag(u.is_guru_mapel) && (
+                      <span className="rounded-full bg-indigo-100 px-3 py-1 text-[8px] font-black uppercase italic text-indigo-600">
+                        Guru Mapel
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="p-6 text-[10px] font-black text-gray-600 uppercase italic">
                   {u.master_kelas?.nama_kelas || u.kelas_diampu || '---'}
@@ -269,8 +332,8 @@ const ManajemenUser = () => {
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
+      </Card>
+    </PageContainer>
   );
 };
 

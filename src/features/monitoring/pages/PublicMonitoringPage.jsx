@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { Sun, Moon, Trophy, AlertTriangle, Monitor, Loader2, Clock, Users } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -11,29 +11,18 @@ const PublicMonitoring = () => {
   const [siswaRajin, setSiswaRajin] = useState([]);
   const [currentSiswaIdx, setCurrentSiswaIdx] = useState(0);
 
-  const getTodayDateWIB = () => {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
-  };
-
-  useEffect(() => {
-    fetchPublicData();
-    const dataInterval = setInterval(() => fetchPublicData(), 3600000);
-    const carouselInterval = setInterval(() => {
-      setCurrentSiswaIdx(prev => (prev + 1) % (siswaRajin.length || 1));
-    }, 5000);
-    return () => { clearInterval(dataInterval); clearInterval(carouselInterval); };
-  }, [siswaRajin.length]);
-
-  const fetchPublicData = async () => {
+  const fetchPublicData = useCallback(async () => {
     try {
-      const hariIni = getTodayDateWIB();
+      const hariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
       
       // Ambil Total Siswa Aktif
       const { count: totalSiswaCount } = await supabase.from('siswa').select('*', { count: 'exact', head: true }).eq('status_siswa', 'Aktif');
 
       const { data: dataAbsen } = await supabase.from('absensi').select('status').eq('tanggal', hariIni);
       const counts = { Hadir: 0, Kesiangan: 0, Sakit: 0, Izin: 0, Alpha: 0 };
-      dataAbsen?.forEach(a => { if(counts.hasOwnProperty(a.status)) counts[a.status]++ });
+      dataAbsen?.forEach(a => {
+        if (Object.prototype.hasOwnProperty.call(counts, a.status)) counts[a.status]++;
+      });
       
       setStats({ 
         hadir: counts.Hadir, terlambat: counts.Kesiangan, 
@@ -74,7 +63,16 @@ const PublicMonitoring = () => {
       });
       setSiswaRajin(Object.values(rekapSiswa).filter(s => s.bolos === 0).slice(0, 10));
     } catch (err) { console.error(err); } finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchPublicData();
+    const dataInterval = setInterval(() => fetchPublicData(), 3600000);
+    const carouselInterval = setInterval(() => {
+      setCurrentSiswaIdx(prev => (prev + 1) % (siswaRajin.length || 1));
+    }, 5000);
+    return () => { clearInterval(dataInterval); clearInterval(carouselInterval); };
+  }, [fetchPublicData, siswaRajin.length]);
 
   const COLORS = { Hadir: '#10b981', Terlambat: '#facc15', Sakit: '#f59e0b', Izin: '#3b82f6', Alpha: '#ef4444' };
   const chartData = [{ name: 'Hadir', value: stats.hadir }, { name: 'Terlambat', value: stats.terlambat }, { name: 'Sakit', value: stats.sakit }, { name: 'Izin', value: stats.izin }, { name: 'Alpha', value: stats.alpha }].filter(d => d.value > 0);

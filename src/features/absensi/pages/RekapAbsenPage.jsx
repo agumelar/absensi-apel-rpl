@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
 import Swal from 'sweetalert2';
 import { Calendar, FileText, Image, Clock, User, Loader2, ArrowRight, RefreshCw, CheckCircle2, XCircle, Info } from 'lucide-react';
@@ -23,13 +23,7 @@ const RekapAbsen = ({ user }) => {
   
   const [counters, setCounters] = useState({ hadir: 0, sakit: 0, izin: 0, kesiangan: 0, alpha: 0 });
 
-  useEffect(() => {
-    if (user) {
-      fetchRekap();
-    }
-  }, [dariTanggal, sampaiTanggal, user]);
-
-  const fetchRekap = async () => {
+  const fetchRekap = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -75,7 +69,13 @@ const RekapAbsen = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dariTanggal, sampaiTanggal, user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchRekap();
+    }
+  }, [fetchRekap, user]);
 
   const tampilkanFoto = (url) => {
     Swal.fire({

@@ -1,0 +1,183 @@
+:root {
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+  --text-900: #0f172a;
+  --text-600: #475569;
+  --line: #e2e8f0;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+}
+
+:root[data-theme='dark'] {
+  --text-900: #e2e8f0;
+  --text-600: #94a3b8;
+  --line: #334155;
+  --surface: #0f172a;
+  --surface-soft: #020617;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text-900);
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.1), transparent 42%),
+    radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.08), transparent 35%),
+    var(--surface-soft);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.app-texture {
+  background-image:
+    radial-gradient(rgba(15, 23, 42, 0.04) 0.45px, transparent 0.45px),
+    linear-gradient(to bottom right, rgba(255, 255, 255, 0.9), rgba(241, 245, 249, 0.85));
+  background-size: 8px 8px, cover;
+}
+
+.premium-card {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 10px 30px -15px rgba(15, 23, 42, 0.22);
+}
+
+:root[data-theme='dark'] .app-texture {
+  background-image:
+    radial-gradient(rgba(148, 163, 184, 0.08) 0.45px, transparent 0.45px),
+    linear-gradient(to bottom right, rgba(2, 6, 23, 0.95), rgba(15, 23, 42, 0.93));
+}
+
+:root[data-theme='dark'] .premium-card {
+  background: rgba(15, 23, 42, 0.76);
+  border-color: rgba(71, 85, 105, 0.55);
+  box-shadow: 0 12px 32px -18px rgba(2, 6, 23, 0.9);
+}
+
+:root[data-theme='dark'] .bg-white,
+:root[data-theme='dark'] .bg-white\/90,
+:root[data-theme='dark'] .bg-white\/92,
+:root[data-theme='dark'] .bg-gray-50,
+:root[data-theme='dark'] .bg-gray-50\/50 {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+}
+
+:root[data-theme='dark'] .bg-blue-50 {
+  background-color: rgba(30, 58, 138, 0.35) !important;
+}
+
+:root[data-theme='dark'] .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.35) !important;
+}
+
+:root[data-theme='dark'] .bg-rose-50 {
+  background-color: rgba(136, 19, 55, 0.35) !important;
+}
+
+:root[data-theme='dark'] .bg-green-50 {
+  background-color: rgba(20, 83, 45, 0.35) !important;
+}
+
+:root[data-theme='dark'] .text-gray-900,
+:root[data-theme='dark'] .text-gray-800,
+:root[data-theme='dark'] .text-slate-900,
+:root[data-theme='dark'] .text-slate-800,
+:root[data-theme='dark'] .text-slate-700,
+:root[data-theme='dark'] .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .text-gray-600,
+:root[data-theme='dark'] .text-gray-500,
+:root[data-theme='dark'] .text-gray-400,
+:root[data-theme='dark'] .text-slate-600,
+:root[data-theme='dark'] .text-slate-500,
+:root[data-theme='dark'] .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .text-blue-700,
+:root[data-theme='dark'] .text-blue-600 {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .text-rose-700 {
+  color: #fda4af !important;
+}
+
+:root[data-theme='dark'] .text-amber-700 {
+  color: #fcd34d !important;
+}
+
+:root[data-theme='dark'] .text-green-600 {
+  color: #86efac !important;
+}
+
+:root[data-theme='dark'] .border-gray-100,
+:root[data-theme='dark'] .border-gray-200,
+:root[data-theme='dark'] .border-slate-200,
+:root[data-theme='dark'] .border-blue-100 {
+  border-color: rgba(71, 85, 105, 0.6) !important;
+}
+
+:root[data-theme='dark'] .border-rose-200,
+:root[data-theme='dark'] .border-amber-100,
+:root[data-theme='dark'] .border-rose-100 {
+  border-color: rgba(71, 85, 105, 0.6) !important;
+}
+
+:root[data-theme='dark'] input,
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea {
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] select option,
+:root[data-theme='dark'] select optgroup {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.premium-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.premium-table thead tr {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.premium-table th {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #64748b;
+}
+
+.premium-table td,
+.premium-table th {
+  padding: 1rem 1.2rem;
+}
+
+.premium-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.premium-table tbody tr:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.micro-loading {
+  color: #3b82f6;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

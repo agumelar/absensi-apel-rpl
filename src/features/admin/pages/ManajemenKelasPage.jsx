@@ -4,6 +4,9 @@ import {
   Plus, Trash2, Loader2, X, Save, School, Filter 
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import Button from '../../../shared/ui/Button';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
 const ManajemenKelas = () => {
   const [kelas, setKelas] = useState([]);
@@ -72,22 +75,23 @@ const ManajemenKelas = () => {
     : kelas.filter(k => k.jurusan_id.toString() === filterJurusan);
 
   return (
-    <div className="max-w-5xl mx-auto p-4 font-sans">
-      <header className="flex justify-between items-center mb-8">
+    <PageContainer className="max-w-5xl">
+      <PageHeader className="mb-8">
         <div>
-          <h1 className="text-3xl font-black italic uppercase text-gray-800 tracking-tighter leading-none">Manajemen Kelas</h1>
-          <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] mt-2 uppercase">Total {kelas.length} Kelas Terdaftar</p>
+          <PageTitle className="text-3xl italic uppercase">Manajemen Kelas</PageTitle>
+          <PageSubtitle className="mt-2">Total {kelas.length} kelas terdaftar</PageSubtitle>
         </div>
-        <button 
+        <Button
           onClick={() => setIsAdding(!isAdding)}
-          className="bg-blue-600 text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase shadow-lg shadow-blue-200 active:scale-95 transition-all"
+          className="text-xs uppercase"
         >
           {isAdding ? <X size={16} /> : <Plus size={16} />} {isAdding ? 'Batal' : 'Tambah Kelas'}
-        </button>
-      </header>
+        </Button>
+      </PageHeader>
 
       {/* FILTER JURUSAN */}
-      <div className="mb-6 flex items-center gap-3 bg-white p-4 rounded-[25px] border border-gray-100 shadow-sm">
+      <Card className="mb-6 rounded-2xl">
+        <CardContent className="flex items-center gap-3 p-4">
         <Filter size={16} className="text-gray-400" />
         <select 
           className="text-xs font-black uppercase outline-none bg-transparent w-full"
@@ -97,10 +101,12 @@ const ManajemenKelas = () => {
           <option value="all">Semua Jurusan</option>
           {jurusan.map(j => <option key={j.id} value={j.id}>{j.nama_jurusan}</option>)}
         </select>
-      </div>
+        </CardContent>
+      </Card>
 
       {isAdding && (
-        <div className="bg-white p-8 rounded-[40px] border border-blue-100 shadow-xl mb-10 animate-in fade-in zoom-in duration-300">
+        <Card className="mb-10 rounded-3xl animate-in fade-in zoom-in duration-300">
+          <CardContent className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Nama Kelas</label>
@@ -124,10 +130,11 @@ const ManajemenKelas = () => {
               </select>
             </div>
           </div>
-          <button onClick={handleSave} className="w-full mt-8 bg-gray-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+          <Button onClick={handleSave} variant="secondary" size="lg" className="w-full mt-8 text-xs uppercase tracking-widest">
             <Save size={18} /> Simpan Data Kelas
-          </button>
-        </div>
+          </Button>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -151,7 +158,7 @@ const ManajemenKelas = () => {
           </div>
         ))}
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

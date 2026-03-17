@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
-import * as XLSX from 'xlsx';
 import { Calendar, Users, Loader2, ArrowRight, RefreshCw, FileDown, Search } from 'lucide-react';
+import { exportJsonToExcel } from '../../../services/shared/excelService';
 
 const AkumulasiSiswa = ({ user }) => {
   // --- SUNTIKAN FIX TIMEZONE GMT+7 ---
@@ -22,13 +22,7 @@ const AkumulasiSiswa = ({ user }) => {
   const [dariTanggal, setDariTanggal] = useState(getTodayDateWIB());
   const [sampaiTanggal, setSampaiTanggal] = useState(getTodayDateWIB());
 
-  useEffect(() => {
-    if (user?.kelas_id || user?.role === 'admin') {
-      fetchAkumulasi();
-    }
-  }, [dariTanggal, sampaiTanggal, user]);
-
-  const fetchAkumulasi = async () => {
+  const fetchAkumulasi = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -77,7 +71,13 @@ const AkumulasiSiswa = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dariTanggal, sampaiTanggal, user]);
+
+  useEffect(() => {
+    if (user?.kelas_id || user?.role === 'admin') {
+      fetchAkumulasi();
+    }
+  }, [fetchAkumulasi, user]);
 
   const dataTerfilter = dataAkumulasi.filter(item => 
     item.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -93,10 +93,11 @@ const AkumulasiSiswa = ({ user }) => {
       "Total": s.total
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(dataExcel);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Rekap");
-    XLSX.writeFile(workbook, `Rekap_Siswa_${user?.kelas_diampu || 'Semua'}_${getTodayDateWIB()}.xlsx`);
+    exportJsonToExcel({
+      rows: dataExcel,
+      sheetName: 'Rekap',
+      fileName: `Rekap_Siswa_${user?.kelas_diampu || 'Semua'}_${getTodayDateWIB()}.xlsx`,
+    });
   };
 
   return (

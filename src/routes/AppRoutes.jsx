@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import Dashboard from '../features/dashboard/pages/DashboardPage';
 import ExecutiveDashboard from '../features/dashboard/pages/ExecutiveDashboardPage';
+import PortalWorkspacePage from '../features/dashboard/pages/PortalWorkspacePage';
 import PiketDashboard from '../features/piket/pages/PiketDashboardPage';
 import PiketInput from '../features/piket/pages/PiketInputPage';
 import RekapPiket from '../features/piket/pages/RekapPiketPage';
@@ -14,14 +15,35 @@ import ManajemenSiswa from '../features/admin/pages/ManajemenSiswaPage';
 import ManajemenUser from '../features/admin/pages/ManajemenUserPage';
 import PublicMonitoring from '../features/monitoring/pages/PublicMonitoringPage';
 import ManajemenKelas from '../features/admin/pages/ManajemenKelasPage';
+import ManajemenMapel from '../features/admin/pages/ManajemenMapelPage';
+import MapelHomePage from '../features/mapel/pages/MapelHomePage';
+import MapelSchedulePage from '../features/mapel/pages/MapelSchedulePage';
+import MapelSessionPage from '../features/mapel/pages/MapelSessionPage';
+import MapelScorePage from '../features/mapel/pages/MapelScorePage';
+import MapelSessionHistoryPage from '../features/mapel/pages/MapelSessionHistoryPage';
+import MapelAuditTrailPage from '../features/mapel/pages/MapelAuditTrailPage';
 import RequireRole from './guards/RequireRole';
-import { DASHBOARD_ROUTE } from '../shared/constants/routes';
+import {
+  APP_SWITCHER_ROUTE,
+  DASHBOARD_ROUTE,
+  MAPEL_AUDIT_ROUTE,
+  MAPEL_DASHBOARD_ROUTE,
+  MAPEL_HISTORY_ROUTE,
+  MAPEL_SCHEDULE_ROUTE,
+  MAPEL_SCORE_ROUTE,
+  MAPEL_SESSION_ROUTE,
+} from '../shared/constants/routes';
 
 const AppRoutes = ({
   isExec,
   isPiket,
   isAdmin,
   isWalas,
+  canAccessMapel,
+  canAccessMapelAudit,
+  canAccessApelWorkspace,
+  hasMultiWorkspace,
+  singleWorkspaceRoute,
   userData,
   dashboardLink,
 }) => {
@@ -30,12 +52,76 @@ const AppRoutes = ({
       <Route path="/monitoring" element={<PublicMonitoring />} />
       <Route
         path={DASHBOARD_ROUTE}
-        element={isExec ? <ExecutiveDashboard user={userData} /> : <Dashboard user={userData} />}
+        element={
+          !canAccessApelWorkspace && canAccessMapel ? (
+            <Navigate to={MAPEL_DASHBOARD_ROUTE} replace />
+          ) : isExec ? (
+            <ExecutiveDashboard user={userData} />
+          ) : (
+            <Dashboard user={userData} />
+          )
+        }
+      />
+      <Route
+        path={APP_SWITCHER_ROUTE}
+        element={
+          <RequireRole allow={hasMultiWorkspace} redirectTo={singleWorkspaceRoute}>
+            <PortalWorkspacePage canAccessMapel={canAccessMapel} apelWorkspaceRoute={singleWorkspaceRoute} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_DASHBOARD_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelHomePage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_SCHEDULE_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelSchedulePage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_SESSION_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelSessionPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_SCORE_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelScorePage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_HISTORY_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelSessionHistoryPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_AUDIT_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapelAudit}>
+            <MapelAuditTrailPage user={userData} />
+          </RequireRole>
+        }
       />
       <Route
         path="/piket-dashboard"
         element={
-          <RequireRole allow={isPiket || isAdmin}>
+          <RequireRole allow={isPiket}>
             <PiketDashboard user={userData} />
           </RequireRole>
         }
@@ -43,7 +129,7 @@ const AppRoutes = ({
       <Route
         path="/piket-input"
         element={
-          <RequireRole allow={isPiket || isAdmin}>
+          <RequireRole allow={isPiket}>
             <PiketInput user={userData} />
           </RequireRole>
         }
@@ -51,7 +137,7 @@ const AppRoutes = ({
       <Route
         path="/piket-absen-global"
         element={
-          <RequireRole allow={isPiket || isAdmin}>
+          <RequireRole allow={isPiket}>
             <PiketAbsensiGlobal />
           </RequireRole>
         }
@@ -59,7 +145,7 @@ const AppRoutes = ({
       <Route
         path="/rekap-piket"
         element={
-          <RequireRole allow={isPiket || isAdmin}>
+          <RequireRole allow={isPiket}>
             <RekapPiket />
           </RequireRole>
         }
@@ -67,7 +153,7 @@ const AppRoutes = ({
       <Route
         path="/absen"
         element={
-          <RequireRole allow={isWalas || isAdmin}>
+          <RequireRole allow={isWalas}>
             <HalamanAbsen user={userData} />
           </RequireRole>
         }
@@ -75,7 +161,7 @@ const AppRoutes = ({
       <Route
         path="/rekap"
         element={
-          <RequireRole allow={isWalas || isAdmin}>
+          <RequireRole allow={isWalas}>
             <RekapAbsen user={userData} />
           </RequireRole>
         }
@@ -83,7 +169,7 @@ const AppRoutes = ({
       <Route
         path="/akumulasi"
         element={
-          <RequireRole allow={isWalas || isAdmin}>
+          <RequireRole allow={isWalas}>
             <AkumulasiSiswa user={userData} />
           </RequireRole>
         }
@@ -109,6 +195,14 @@ const AppRoutes = ({
         element={
           <RequireRole allow={isAdmin}>
             <ManajemenKelas />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/manajemen-mapel"
+        element={
+          <RequireRole allow={isAdmin}>
+            <ManajemenMapel />
           </RequireRole>
         }
       />

@@ -1,10 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { 
   Users, AlertCircle, Clock, CheckCircle, 
   Filter, Printer, Loader2, TrendingUp, Info
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
+
+const getTodayDateWIB = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+};
+
+const getStartOfTodayWIB = () => {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  const parts = formatter.formatToParts(now);
+  const m = {};
+  parts.forEach((p) => {
+    m[p.type] = p.value;
+  });
+  return `${m.year}-${m.month}-${m.day}T00:00:00+07:00`;
+};
 
 const PiketDashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -14,35 +40,7 @@ const PiketDashboard = () => {
   const [filterKelas, setFilterKelas] = useState('Semua');
   const [daftarKelas, setDaftarKelas] = useState([]);
 
-  // --- LOGIKA TIMEZONE WIB SAKTI ---
-  const getTodayDateWIB = () => {
-    // Memaksa format YYYY-MM-DD sesuai zona Asia/Jakarta
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Jakarta',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  };
-
-  const getStartOfTodayWIB = () => {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Jakarta',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-    });
-    const parts = formatter.formatToParts(now);
-    const m = {}; parts.forEach(p => m[p.type] = p.value);
-    // Menghasilkan ISO string jam 00:00:00 di Jakarta
-    return `${m.year}-${m.month}-${m.day}T00:00:00+07:00`;
-  };
-
-  useEffect(() => {
-    fetchPiketData();
-  }, [filterKelas]);
-
-  const fetchPiketData = async () => {
+  const fetchPiketData = useCallback(async () => {
     try {
       setLoading(true);
       const hariIni = getTodayDateWIB();
@@ -67,7 +65,7 @@ const PiketDashboard = () => {
       if (filterKelas !== 'Semua') {
         querySiswa = querySiswa.eq('kelas_id', parseInt(filterKelas));
       }
-      const { data: siswaData, count: totalSiswaCount } = await querySiswa;
+      const { count: totalSiswaCount } = await querySiswa;
         
       const totalSiswaPerKelas = {};
       const { data: allSiswa } = await supabase.from('siswa').select('id, kelas_id').eq('status_siswa', 'Aktif');
@@ -87,7 +85,9 @@ const PiketDashboard = () => {
       const { data: dataAbsen } = await queryAbsen;
 
       const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Kesiangan: 0 };
-      dataAbsen?.forEach(a => { if(counts.hasOwnProperty(a.status)) counts[a.status]++ });
+      dataAbsen?.forEach(a => {
+        if (Object.prototype.hasOwnProperty.call(counts, a.status)) counts[a.status]++;
+      });
       
       setStats({
         hadir: counts.Hadir,
@@ -144,7 +144,11 @@ const PiketDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterKelas]);
+
+  useEffect(() => {
+    fetchPiketData();
+  }, [fetchPiketData]);
 
   // ... (Sisa kode ke bawah sama kayak punya lo)
   const COLORS = { Hadir: '#10b981', Terlambat: '#facc15', Sakit: '#f59e0b', Izin: '#3b82f6', Alpha: '#ef4444' };
@@ -164,11 +168,11 @@ const PiketDashboard = () => {
   );
 
   return (
-    <div className="max-w-6xl mx-auto p-4 pb-20 font-sans">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 text-gray-800 text-left">
+    <PageContainer className="pb-20">
+      <PageHeader className="text-left">
         <div className="text-left">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none">Piket Control Room</h1>
-          <p className="text-[10px] font-bold text-blue-600 tracking-[0.3em] uppercase mt-2">Live Monitoring Dashboard</p>
+          <PageTitle className="text-3xl italic uppercase">Piket Control Room</PageTitle>
+          <PageSubtitle className="mt-2">Live Monitoring Dashboard</PageSubtitle>
         </div>
         
         <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-sm border border-gray-100 w-full md:w-auto">
@@ -182,37 +186,37 @@ const PiketDashboard = () => {
             {daftarKelas.map(k => <option key={k.id} value={k.id}>KELAS: {k.nama_kelas}</option>)}
           </select>
         </div>
-      </header>
+      </PageHeader>
 
       {/* STATS CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8 text-gray-800">
-        <div className="bg-blue-600 p-6 rounded-[35px] text-white shadow-lg flex flex-col items-center">
+        <div className="bg-blue-600 p-6 rounded-[28px] text-white shadow-lg flex flex-col items-center">
           <Users size={20} className="mb-2 opacity-50" />
           <h2 className="text-3xl font-black">{stats.totalSiswa}</h2>
           <p className="text-[9px] font-black uppercase tracking-widest opacity-80">Total Siswa</p>
         </div>
-        <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
+        <Card className="rounded-[28px]"><CardContent className="p-6 flex flex-col items-center">
           <CheckCircle size={20} className="text-green-500 mb-2" />
           <h2 className="text-3xl font-black">{stats.hadir}</h2>
           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Hadir</p>
-        </div>
-        <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
+        </CardContent></Card>
+        <Card className="rounded-[28px]"><CardContent className="p-6 flex flex-col items-center">
           <Clock size={20} className="text-amber-500 mb-2" />
           <h2 className="text-3xl font-black">{stats.terlambat}</h2>
           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Telat</p>
-        </div>
-        <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
+        </CardContent></Card>
+        <Card className="rounded-[28px]"><CardContent className="p-6 flex flex-col items-center">
           <div className="flex items-center justify-center mb-2">
             <Info size={20} className="text-orange-500" />
           </div>
           <h2 className="text-3xl font-black">{stats.sakit}</h2>
           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Sakit</p>
-        </div>
-        <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex flex-col items-center">
+        </CardContent></Card>
+        <Card className="rounded-[28px]"><CardContent className="p-6 flex flex-col items-center">
           <TrendingUp size={20} className="text-blue-600 mb-2" />
           <h2 className="text-3xl font-black">{stats.izin}</h2>
           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Izin</p>
-        </div>
+        </CardContent></Card>
         <div className="bg-red-600 p-6 rounded-[35px] text-white shadow-lg flex flex-col items-center">
           <AlertCircle size={20} className="mb-2 opacity-50" />
           <h2 className="text-3xl font-black">{stats.alpha}</h2>
@@ -280,7 +284,7 @@ const PiketDashboard = () => {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

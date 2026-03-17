@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { Lock, User, Loader2 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import Button from '../../../shared/ui/Button';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import InputField from '../../../shared/ui/InputField';
 
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -51,70 +54,65 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-blue-600 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-[40px] p-10 shadow-2xl">
-        
-        {/* BAGIAN LOGO SEKOLAH */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-24 h-24 bg-gray-50 rounded-3xl flex items-center justify-center p-4 mb-4 shadow-inner hover:scale-105 transition-transform duration-300">
-            <img 
-              src="/Jingga.png" 
-              alt="Logo SMKN 1 Rongga" 
-              className="w-full h-full object-contain"
-              // Jika logo belum ada, gambar tidak akan pecah berlebihan
-              onError={(e) => e.target.style.display = 'none'} 
-            />
+    <div className="app-texture min-h-screen bg-blue-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md rounded-3xl border-blue-100/80">
+        <CardContent className="p-8 md:p-10">
+          <div className="mb-8 flex flex-col items-center">
+            <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <img
+                src="/Jingga.png"
+                alt="Logo SMKN 1 Rongga"
+                className="h-full w-full object-contain"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+            <h1 className="text-4xl font-black tracking-tight text-slate-800">JINGGA ASIK</h1>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600">
+              Official SMKN 1 Rongga
+            </p>
           </div>
-          <h1 className="text-4xl font-black text-gray-800 italic tracking-tighter">JINGGA ASIK</h1>
-          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.3em] mt-1">
-            Official SMKN 1 Rongga
-          </p>
-        </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div>
-            <label className="text-[10px] font-black text-gray-400 ml-2 uppercase">Username</label>
-            <div className="flex items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 mt-1 focus-within:border-blue-300 transition-all">
-              <User size={20} className="text-gray-400 mr-3" />
-              <input 
-                type="text" 
-                className="bg-transparent outline-none w-full font-bold text-gray-700" 
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Username
+              </label>
+              <InputField
+                icon={User}
+                type="text"
                 placeholder="Masukkan username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
-          </div>
 
-          <div>
-            <label className="text-[10px] font-black text-gray-400 ml-2 uppercase">Password</label>
-            <div className="flex items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 mt-1 focus-within:border-blue-300 transition-all">
-              <Lock size={20} className="text-gray-400 mr-3" />
-              <input 
-                type="password" 
-                className="bg-transparent outline-none w-full font-bold text-gray-700" 
-                placeholder="••••••••"
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Password
+              </label>
+              <InputField
+                icon={Lock}
+                type="password"
+                placeholder="Masukkan password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
-          </div>
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-200 transition-all flex items-center justify-center gap-2 active:scale-95"
-          >
-            {loading ? <Loader2 className="animate-spin" /> : 'MASUK SEKARANG'}
-          </button>
-        </form>
-        
-        <p className="text-center text-gray-300 text-[9px] font-bold mt-8 uppercase tracking-widest">
-          Build with ❤️ for SMKN 1 Rongga by UP RPL
-        </p>
-      </div>
+            <Button type="submit" disabled={loading} size="lg" className="w-full">
+              {loading ? <Loader2 className="animate-spin" /> : 'Masuk Sekarang'}
+            </Button>
+          </form>
+
+          <p className="mt-8 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+            Build with love for SMKN 1 Rongga
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { hasValidSession } from '../../services/auth/sessionService';
 
 const RequireAuth = ({
   isLoggedIn,
@@ -8,11 +9,13 @@ const RequireAuth = ({
   fallbackElement,
   children,
 }) => {
-  if (!isLoggedIn && currentPath === publicPath) {
+  const sessionReady = isLoggedIn || hasValidSession();
+
+  if (!sessionReady && currentPath === publicPath) {
     return publicElement;
   }
 
-  if (!isLoggedIn) {
+  if (!sessionReady) {
     return fallbackElement;
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { 
@@ -6,6 +6,8 @@ import {
   BarChart3, Clock, AlertTriangle, School, Settings, ArrowRight, TrendingUp
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
 const Dashboard = ({ user }) => {
   const [dataGrafik, setDataGrafik] = useState([]);
@@ -13,31 +15,20 @@ const Dashboard = ({ user }) => {
   const [stats, setStats] = useState({ totalSiswa: 0, totalUser: 0, totalKelas: 0 });
   const [jumlahTerabsen, setJumlahTerabsen] = useState(0); 
   const [persentaseHadir, setPersentaseHadir] = useState(0);
-  const [statusKelas, setStatusKelas] = useState([]); 
   const [siswaBermasalah, setSiswaBermasalah] = useState([]);
   const [filterBulan, setFilterBulan] = useState(new Date().getMonth() + 1);
 
   const isAdmin = user?.role?.toLowerCase() === 'admin';
 
-  // --- SUNTIKAN FIX TIMEZONE GMT+7 ---
-  const getTodayDateWIB = () => {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Jakarta',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  };
-
-  useEffect(() => {
-    if (user) fetchDashboardData();
-  }, [user, filterBulan]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      // GANTI DARI new Date().toISOString() KE WIB
-      const hariIni = getTodayDateWIB();
+      const hariIni = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
 
       if (isAdmin) {
         const { count: u } = await supabase.from('walikelas').select('*', { count: 'exact', head: true });
@@ -45,12 +36,6 @@ const Dashboard = ({ user }) => {
         const { count: s } = await supabase.from('siswa').select('*', { count: 'exact', head: true }).eq('status_siswa', 'Aktif');
         setStats({ totalUser: u || 0, totalKelas: k || 0, totalSiswa: s || 0 });
 
-        const { data: mKelas } = await supabase.from('master_kelas').select('id, nama_kelas');
-        const { data: aHarian } = await supabase.from('absensi').select('siswa!inner(kelas_id)').eq('tanggal', hariIni);
-        setStatusKelas((mKelas || []).map(kls => ({
-          kelas: kls.nama_kelas,
-          status: (aHarian || []).some(d => d.siswa?.kelas_id === kls.id)
-        })));
       } else {
         const targetKelasId = user?.kelas_id;
         if (!targetKelasId) {
@@ -64,7 +49,9 @@ const Dashboard = ({ user }) => {
 
         const { data: dataHarian } = await supabase.from('absensi').select(`status, siswa!inner(kelas_id)`).eq('tanggal', hariIni).eq('siswa.kelas_id', targetKelasId);
         const counts = { Hadir: 0, Sakit: 0, Izin: 0, Kesiangan: 0, Alpha: 0 };
-        (dataHarian || []).forEach(item => { if (counts.hasOwnProperty(item.status)) counts[item.status]++; });
+        (dataHarian || []).forEach(item => {
+          if (Object.prototype.hasOwnProperty.call(counts, item.status)) counts[item.status]++;
+        });
         
         setDataGrafik(Object.keys(counts).map(key => ({ name: key, value: counts[key] })).filter(d => d.value > 0));
         setJumlahTerabsen(dataHarian?.length || 0);
@@ -91,7 +78,11 @@ const Dashboard = ({ user }) => {
     } finally { 
         setLoading(false); 
     }
-  };
+  }, [filterBulan, isAdmin, user]);
+
+  useEffect(() => {
+    if (user) fetchDashboardData();
+  }, [fetchDashboardData, user]);
 
   const kondisi = {
     85: { text: 'SANGAT BAIK', color: 'text-green-600', bg: 'bg-green-50', icon: <CheckCircle className="text-green-500" size={32} /> },
@@ -99,47 +90,54 @@ const Dashboard = ({ user }) => {
     0: { text: 'BUTUH PERHATIAN', color: 'text-red-600', bg: 'bg-red-50', icon: <AlertTriangle className="text-red-500" size={32} /> }
   };
   const currentKondisi = persentaseHadir >= 85 ? kondisi[85] : persentaseHadir >= 70 ? kondisi[70] : kondisi[0];
+  const statusBadgeClass = {
+    Hadir: 'bg-green-500 text-white',
+    Sakit: 'bg-amber-500 text-white',
+    Izin: 'bg-blue-600 text-white',
+    Kesiangan: 'bg-orange-500 text-white',
+    Alpha: 'bg-red-600 text-white',
+  };
 
   if (loading) return <div className="p-40 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40} /></div>;
 
   if (isAdmin) {
     return (
-      <div className="max-w-6xl mx-auto p-4 font-sans text-gray-800 text-left">
-        <header className="mb-10">
+      <PageContainer className="text-left">
+        <PageHeader className="mb-8 block">
           <div className="flex items-center gap-2 text-blue-600 mb-2">
             <Settings size={20} /> <span className="text-[10px] font-black uppercase tracking-[0.4em]">Control Center</span>
           </div>
-          <h1 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 leading-none">System Admin</h1>
-        </header>
+          <PageTitle className="italic uppercase">System Admin</PageTitle>
+        </PageHeader>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex items-center justify-between">
+          <Card className="rounded-3xl"><CardContent className="flex items-center justify-between p-8">
             <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">Users</p><h2 className="text-4xl font-black text-blue-600">{stats.totalUser}</h2></div>
             <ShieldCheck size={40} className="text-blue-100" />
-          </div>
-          <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex items-center justify-between">
+          </CardContent></Card>
+          <Card className="rounded-3xl"><CardContent className="flex items-center justify-between p-8">
             <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">Kelas</p><h2 className="text-4xl font-black text-blue-600">{stats.totalKelas}</h2></div>
             <School size={40} className="text-blue-100" />
-          </div>
-          <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex items-center justify-between">
+          </CardContent></Card>
+          <Card className="rounded-3xl"><CardContent className="flex items-center justify-between p-8">
             <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">Siswa</p><h2 className="text-4xl font-black text-blue-600">{stats.totalSiswa}</h2></div>
             <Users size={40} className="text-blue-100" />
-          </div>
+          </CardContent></Card>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
           <Link to="/manajemen-user" className="bg-blue-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">User Control</span><ArrowRight/></Link>
           <Link to="/manajemen-kelas" className="bg-indigo-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">Kelas Data</span><ArrowRight/></Link>
           <Link to="/manajemen-siswa" className="bg-violet-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">Siswa Master</span><ArrowRight/></Link>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 pb-20 font-sans text-gray-800 text-left">
-      <header className="mb-10">
-        <h1 className="text-5xl font-black italic tracking-tighter uppercase leading-none text-gray-800">Visual Analytics</h1>
-        <p className="text-blue-600 font-bold text-[10px] tracking-[0.3em] mt-3 uppercase italic">OVERVIEW KELAS {user?.kelas_diampu || 'DIAMPU'} HARI INI</p>
-      </header>
+    <PageContainer className="pb-20 text-left">
+      <PageHeader className="mb-8 block">
+        <PageTitle className="text-4xl md:text-5xl italic uppercase">Visual Analytics</PageTitle>
+        <PageSubtitle className="mt-3 italic">Overview kelas {user?.kelas_diampu || 'diampu'} hari ini</PageSubtitle>
+      </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <div className="bg-blue-600 p-10 rounded-[45px] text-white shadow-xl shadow-blue-200 flex flex-col justify-between min-h-[260px]">
@@ -182,9 +180,14 @@ const Dashboard = ({ user }) => {
           </div>
           <div className="flex justify-center gap-2 overflow-hidden">
              {dataGrafik.map((d, i) => (
-               <span key={i} className="text-[8px] font-black px-2 py-1 bg-gray-50 rounded-lg text-gray-400 uppercase">{d.name}</span>
-             ))}
-          </div>
+               <span
+                 key={i}
+                 className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase ${statusBadgeClass[d.name] || 'bg-slate-600 text-white'}`}
+               >
+                 {d.name}
+               </span>
+              ))}
+           </div>
         </div>
       </div>
 
@@ -221,7 +224,7 @@ const Dashboard = ({ user }) => {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

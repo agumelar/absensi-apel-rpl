@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { 
   User, Loader2, Clock, CheckCircle, 
@@ -11,6 +11,9 @@ import {
   upsertBulkAbsensi,
 } from '../../../services/absensiService';
 import { uploadBuktiAbsen } from '../../../services/supabase/storageService';
+import Button from '../../../shared/ui/Button';
+import Card, { CardContent } from '../../../shared/ui/Card';
+import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
 const HalamanAbsen = ({ user }) => {
   const [siswa, setSiswa] = useState([]);
@@ -19,18 +22,7 @@ const HalamanAbsen = ({ user }) => {
   const [sudahAbsenData, setSudahAbsenData] = useState({}); 
   const [isLibur, setIsLibur] = useState(false);
 
-  useEffect(() => {
-    const hariIni = new Date().getDay();
-    // 0 = Minggu, 6 = Sabtu
-    if (hariIni === 0 || hariIni === 6) { 
-      setIsLibur(true);
-      setLoading(false);
-    } else if (user) {
-      fetchData();
-    }
-  }, [user]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const tanggalHariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
@@ -66,7 +58,17 @@ const HalamanAbsen = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    const hariIni = new Date().getDay();
+    if (hariIni === 0 || hariIni === 6) {
+      setIsLibur(true);
+      setLoading(false);
+    } else if (user) {
+      fetchData();
+    }
+  }, [fetchData, user]);
 
   const handleStatus = async (siswaId, status) => {
     if (status === 'Kesiangan') {
@@ -150,13 +152,13 @@ const HalamanAbsen = ({ user }) => {
   );
 
   return (
-    <div className="max-w-4xl mx-auto pb-32 p-4 font-sans">
-      <header className="mb-8">
-        <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none">ABSENSI HARIAN</h1>
-        <p className="text-blue-600 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">
+    <PageContainer className="max-w-4xl pb-32">
+      <PageHeader className="mb-8 block">
+        <PageTitle className="text-3xl italic uppercase">Absensi Harian</PageTitle>
+        <PageSubtitle className="mt-2">
           {user?.kelas_diampu || 'KELAS TIDAK TERDETEKSI'} • {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
-      </header>
+        </PageSubtitle>
+      </PageHeader>
 
       <div className="space-y-4">
         {siswa.length === 0 ? (
@@ -170,7 +172,8 @@ const HalamanAbsen = ({ user }) => {
             const statusTerpilih = isLocked ? dataSdhAbsen.status : absensi[item.id]?.status;
 
             return (
-              <div key={item.id} className={`p-5 rounded-[35px] border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${isLocked ? 'bg-gray-50/50 border-gray-100 opacity-80' : 'bg-white border-gray-100 shadow-sm'}`}>
+              <Card key={item.id} className={`rounded-[30px] ${isLocked ? 'opacity-80' : ''}`}>
+                <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-black text-gray-800 text-xs uppercase">{item.nama_siswa}</h3>
@@ -215,7 +218,8 @@ const HalamanAbsen = ({ user }) => {
                     );
                   })}
                 </div>
-              </div>
+                </CardContent>
+              </Card>
             );
           })
         )}
@@ -223,12 +227,12 @@ const HalamanAbsen = ({ user }) => {
 
       {Object.keys(absensi).length > 0 && (
         <div className="fixed bottom-8 left-0 right-0 px-4 flex justify-center z-50 animate-in slide-in-from-bottom-10">
-          <button onClick={handleSimpanAbsensi} className="w-full max-w-md py-5 bg-blue-600 text-white rounded-[25px] font-black text-xs tracking-[0.2em] shadow-2xl active:scale-95 uppercase">
+          <Button onClick={handleSimpanAbsensi} size="lg" className="w-full max-w-md py-5 rounded-[20px] text-xs tracking-[0.2em] uppercase">
             SIMPAN {Object.keys(absensi).length} ENTRY BARU
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 };
 

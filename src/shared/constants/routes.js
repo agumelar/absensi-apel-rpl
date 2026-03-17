@@ -1,3 +1,10 @@
 export const PUBLIC_MONITORING_ROUTE = '/monitoring';
 export const DASHBOARD_ROUTE = '/dashboard';
 export const PIKET_DASHBOARD_ROUTE = '/piket-dashboard';
+export const APP_SWITCHER_ROUTE = '/portal';
+export const MAPEL_DASHBOARD_ROUTE = '/mapel';
+export const MAPEL_SCHEDULE_ROUTE = '/mapel/jadwal';
+export const MAPEL_SESSION_ROUTE = '/mapel/sesi';
+export const MAPEL_SCORE_ROUTE = '/mapel/nilai';
+export const MAPEL_HISTORY_ROUTE = '/mapel/riwayat';
+export const MAPEL_AUDIT_ROUTE = '/mapel/audit';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardCheck,
@@ -15,8 +15,40 @@ import {
   SearchCheck,
   ShieldCheck,
   School,
+  BookOpen,
   DownloadCloud,
+  FileSearch,
+  ArrowLeftRight,
+  Sun,
+  Moon,
 } from 'lucide-react';
+import {
+  APP_SWITCHER_ROUTE,
+  DASHBOARD_ROUTE,
+  MAPEL_AUDIT_ROUTE,
+  MAPEL_DASHBOARD_ROUTE,
+  MAPEL_HISTORY_ROUTE,
+  MAPEL_SCHEDULE_ROUTE,
+  MAPEL_SCORE_ROUTE,
+  MAPEL_SESSION_ROUTE,
+} from '../shared/constants/routes';
+import Button from '../shared/ui/Button';
+import { cn } from '../shared/ui/cn';
+
+const navBaseClass =
+  'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200';
+
+const navClassName = ({ isActive }) =>
+  cn(
+    navBaseClass,
+    isActive
+      ? 'bg-blue-600 text-white shadow-md shadow-blue-200/80'
+      : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
+  );
+
+const SectionLabel = ({ children }) => (
+  <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{children}</p>
+);
 
 const AppShell = ({
   isSidebarOpen,
@@ -25,209 +57,234 @@ const AppShell = ({
   isExec,
   isWalas,
   isAdmin,
+  canAccessMapel,
+  canAccessMapelAudit,
+  hasMultiWorkspace,
   deferredPrompt,
   handleInstallClick,
   userData,
   userRole,
+  isDark,
+  toggleTheme,
   handleLogout,
   children,
 }) => {
+  const location = useLocation();
+  const isAuditRoute = location.pathname === MAPEL_AUDIT_ROUTE;
+  const isMapelWorkspace = location.pathname.startsWith('/mapel') && !isAuditRoute;
+
+  const navMapel = [
+    { to: MAPEL_SCHEDULE_ROUTE, icon: BookOpen, label: 'Jadwal Mengajar' },
+    { to: MAPEL_SESSION_ROUTE, icon: ClipboardCheck, label: 'Sesi & Absensi' },
+    { to: MAPEL_SCORE_ROUTE, icon: BarChart3, label: 'Nilai Harian' },
+    { to: MAPEL_HISTORY_ROUTE, icon: History, label: 'Riwayat Sesi' },
+  ];
+
+  const navMain = [
+    ...(hasMultiWorkspace
+      ? [{ to: APP_SWITCHER_ROUTE, icon: ArrowLeftRight, label: 'Pilih Workspace' }]
+      : []),
+    isPiket
+      ? { to: '/piket-dashboard', icon: PieChartIcon, label: 'Dashboard Piket' }
+      : isMapelWorkspace && canAccessMapel
+        ? { to: MAPEL_DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard Mapel' }
+        : { to: DASHBOARD_ROUTE, icon: LayoutDashboard, label: isExec ? 'Executive Control' : 'Dashboard' },
+    ...(!isMapelWorkspace && canAccessMapelAudit
+      ? [{ to: MAPEL_AUDIT_ROUTE, icon: FileSearch, label: 'Audit Trail Mapel' }]
+      : []),
+  ];
+
+  const navPiket = [
+    { to: '/piket-absen-global', icon: SearchCheck, label: 'Koreksi Absen' },
+    { to: '/piket-input', icon: Printer, label: 'Layanan Piket' },
+    { to: '/rekap-piket', icon: History, label: 'Histori Layanan' },
+  ];
+
+  const navWalasOps = [{ to: '/absen', icon: ClipboardCheck, label: 'Input Absensi' }];
+  const navWalasReport = [
+    { to: '/rekap', icon: FileText, label: 'Log Absensi' },
+    { to: '/akumulasi', icon: BarChart3, label: 'Akumulasi' },
+  ];
+  const navAdmin = [
+    { to: '/manajemen-user', icon: ShieldCheck, label: 'User & Akses' },
+    { to: '/manajemen-kelas', icon: School, label: 'Data Kelas' },
+    { to: '/manajemen-siswa', icon: Users, label: 'Data Siswa' },
+    { to: '/manajemen-mapel', icon: BookOpen, label: 'Mata Pelajaran' },
+  ];
+
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans relative text-gray-800">
+    <div className="app-texture relative flex min-h-screen text-slate-800">
       {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+        <button
+          className="fixed inset-0 z-40 bg-slate-900/45 md:hidden"
           onClick={() => setSidebarOpen(false)}
-        ></div>
+          aria-label="Close menu overlay"
+        />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-100 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none`}
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex h-screen w-[290px] flex-col border-r border-slate-200/80 bg-white/92 px-4 py-4 backdrop-blur-xl transition-transform duration-300 md:translate-x-0',
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
       >
-        <div className="p-6 flex justify-between items-center">
-          <h1 className="text-2xl font-black text-blue-600 italic tracking-tighter uppercase leading-none text-left">
-            JINGGA ASIK
-          </h1>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-400">
-            <X size={24} />
+        <div className="mb-5 flex items-center justify-between px-2">
+          <div>
+            <h1 className="text-xl font-black uppercase tracking-tight text-blue-700">Jingga Asik</h1>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">Smart Attendance</p>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 md:hidden"
+            aria-label="Close sidebar"
+          >
+            <X size={20} />
           </button>
         </div>
 
-        <nav className="mt-6 px-4 space-y-8 overflow-y-auto max-h-[calc(100vh-250px)]">
-          <div>
-            <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic text-left">
-              Main Menu
-            </p>
+        <nav className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1 pb-3">
+          <div className="space-y-2">
+            <SectionLabel>Main Menu</SectionLabel>
             <div className="space-y-1">
-              {isPiket ? (
-                <Link
-                  to="/piket-dashboard"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <PieChartIcon size={18} className="text-blue-600" /> Dashboard Piket
-                </Link>
-              ) : (
-                <Link
-                  to="/dashboard"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <LayoutDashboard size={18} className="text-blue-600" />{' '}
-                  {isExec ? 'Executive Control' : 'Dashboard'}
-                </Link>
-              )}
+              {navMain.map(({ to, icon, label }) => (
+                <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                  {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                  <span>{label}</span>
+                </NavLink>
+              ))}
             </div>
           </div>
 
           {isPiket && (
-            <div>
-              <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic text-left">
-                Layanan Piket
-              </p>
-              <div className="space-y-1 text-left">
-                <Link
-                  to="/piket-absen-global"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <SearchCheck size={18} className="text-blue-600" /> Koreksi Absen
-                </Link>
-                <Link
-                  to="/piket-input"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <Printer size={18} className="text-blue-600" /> Layanan Piket
-                </Link>
-                <Link
-                  to="/rekap-piket"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <History size={18} className="text-blue-600" /> Histori Layanan
-                </Link>
+            <div className="space-y-2">
+              <SectionLabel>Layanan Piket</SectionLabel>
+              <div className="space-y-1">
+                {navPiket.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isMapelWorkspace && canAccessMapel && (
+            <div className="space-y-2">
+              <SectionLabel>Modul Mapel</SectionLabel>
+              <div className="space-y-1">
+                {navMapel.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
               </div>
             </div>
           )}
 
           {isWalas && (
-            <div className="text-left">
-              <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic">
-                Operasional
-              </p>
-              <Link
-                to="/absen"
-                onClick={() => setSidebarOpen(false)}
-                className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-              >
-                <ClipboardCheck size={18} className="text-blue-600" /> Input Absensi
-              </Link>
+            <div className="space-y-2">
+              <SectionLabel>Operasional</SectionLabel>
+              <div className="space-y-1">
+                {navWalasOps.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
             </div>
           )}
 
           {isWalas && (
-            <div className="text-left">
-              <p className="px-4 text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3 italic">
-                Laporan
-              </p>
+            <div className="space-y-2">
+              <SectionLabel>Laporan</SectionLabel>
               <div className="space-y-1">
-                <Link
-                  to="/rekap"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <FileText size={18} className="text-blue-600" /> Log Absensi
-                </Link>
-                <Link
-                  to="/akumulasi"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-2xl font-bold text-gray-600 hover:bg-blue-50 transition-all text-xs uppercase"
-                >
-                  <BarChart3 size={18} className="text-blue-600" /> Akumulasi
-                </Link>
+                {navWalasReport.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
               </div>
             </div>
           )}
 
           {isAdmin && (
-            <div className="bg-gray-50 p-4 rounded-[30px] border border-gray-100 text-left">
-              <p className="px-2 text-[9px] font-black text-blue-600 uppercase tracking-[0.3em] mb-3 italic text-center">
-                Admin Panel
-              </p>
+            <div className="space-y-2">
+              <SectionLabel>Admin Panel</SectionLabel>
               <div className="space-y-1">
-                <Link
-                  to="/manajemen-user"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl font-bold text-gray-600 hover:bg-white hover:shadow-sm transition-all text-[10px] uppercase"
-                >
-                  <ShieldCheck size={16} className="text-blue-600" /> User & Akses
-                </Link>
-                <Link
-                  to="/manajemen-kelas"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl font-bold text-gray-600 hover:bg-white hover:shadow-sm transition-all text-[10px] uppercase"
-                >
-                  <School size={16} className="text-blue-600" /> Data Kelas
-                </Link>
-                <Link
-                  to="/manajemen-siswa"
-                  onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl font-bold text-gray-600 hover:bg-white hover:shadow-sm transition-all text-[10px] uppercase"
-                >
-                  <Users size={16} className="text-blue-600" /> Data Siswa
-                </Link>
+                {navAdmin.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
               </div>
             </div>
           )}
         </nav>
 
-        <div className="absolute bottom-0 w-full p-6 border-t border-gray-50 bg-white space-y-3">
+        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
           {deferredPrompt && (
-            <button
-              onClick={handleInstallClick}
-              className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-blue-600 text-white font-bold text-[10px] hover:bg-blue-700 transition-all uppercase tracking-widest"
-            >
-              <DownloadCloud size={14} /> Install Aplikasi
-            </button>
+            <Button onClick={handleInstallClick} className="w-full justify-center">
+              <DownloadCloud size={16} /> Install Aplikasi
+            </Button>
           )}
 
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black uppercase text-sm">
+          <div className="premium-card flex items-center gap-3 rounded-xl px-3 py-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold uppercase text-white">
               {userData?.nama_lengkap?.charAt(0)}
             </div>
-            <div className="overflow-hidden text-left">
-              <p className="text-[10px] font-black text-gray-800 truncate uppercase">
-                {userData?.nama_lengkap}
-              </p>
-              <p className="text-[8px] font-bold text-blue-500 uppercase tracking-widest italic">
-                {userRole}
-              </p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800">{userData?.nama_lengkap}</p>
+              <p className="truncate text-[11px] font-medium uppercase tracking-wide text-blue-600">{userRole}</p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-red-50 text-red-600 font-bold text-[10px] hover:bg-red-100 transition-all uppercase tracking-widest"
-          >
-            <LogOut size={14} /> Keluar
-          </button>
+
+          <Button onClick={handleLogout} variant="danger" className="w-full justify-center">
+            <LogOut size={16} /> Keluar
+          </Button>
         </div>
       </aside>
 
-      <main className="flex-1 w-full md:ml-72 flex flex-col min-h-screen">
-        <header className="md:hidden bg-white/90 backdrop-blur-md p-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-30">
-          <h1 className="text-lg font-black text-blue-600 italic uppercase leading-none tracking-tighter text-left">
-            JINGGA ASIK
-          </h1>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 bg-blue-50 text-blue-600 rounded-xl"
-          >
-            <Menu size={24} />
-          </button>
+      <main className="flex min-h-screen w-full flex-1 flex-col md:ml-[290px]">
+        <header
+          className={cn(
+            'sticky top-0 z-30 border-b px-4 py-3 backdrop-blur-xl md:px-8',
+            isDark ? 'border-slate-700/70 bg-slate-900/85' : 'border-slate-200/80 bg-white/90'
+          )}
+        >
+          <div className="mx-auto flex max-w-[1400px] items-center justify-end">
+            <div className="mr-auto md:hidden">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-lg border border-slate-200 p-2 text-slate-600 md:hidden"
+                aria-label="Open sidebar"
+              >
+                <Menu size={20} />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold',
+                isDark
+                  ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              )}
+              aria-label="Toggle theme"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <Sun size={15} className="text-amber-500" /> : <Moon size={15} className="text-blue-600" />}
+              <span className="hidden sm:inline">{isDark ? 'Light' : 'Dark'}</span>
+            </button>
+          </div>
         </header>
 
-        <div className="p-4 md:p-10 flex-grow">{children}</div>
+        <div className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-8">{children}</div>
       </main>
     </div>
   );
