@@ -14,7 +14,14 @@ const TeacherPerformancePage = ({ user }) => {
   const [kelasId, setKelasId] = useState('all');
   const [kelasOptions, setKelasOptions] = useState([]);
   const [performance, setPerformance] = useState({
-    summary: { totalSessions: 0, totalTeachers: 0, averagePresenceRate: 0, averageLateRate: 0 },
+    summary: {
+      totalSessions: 0,
+      totalTeachers: 0,
+      totalCheckIns: 0,
+      totalCheckOuts: 0,
+      averagePresenceRate: 0,
+      averageLateRate: 0,
+    },
     rows: [],
   });
 
@@ -96,7 +103,7 @@ const TeacherPerformancePage = ({ user }) => {
       <PageHeader className="block">
         <PageTitle className="text-2xl md:text-3xl">Teacher Performance</PageTitle>
         <PageSubtitle className="mt-2 normal-case tracking-wide text-slate-500">
-          Monitoring performa kehadiran guru mapel, tingkat keterlambatan, dan jumlah sesi mengajar.
+          Monitoring performa kehadiran guru mapel, check-in/out, tingkat keterlambatan, dan jumlah sesi mengajar.
         </PageSubtitle>
       </PageHeader>
 
@@ -149,7 +156,7 @@ const TeacherPerformancePage = ({ user }) => {
         Periode data: <span className="font-semibold text-gray-700">{periodLabel}</span>
       </p>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
           <p className="text-xs text-slate-500">Total Sesi</p>
           <p className="text-2xl font-black text-slate-800">{performance.summary.totalSessions}</p>
@@ -166,6 +173,14 @@ const TeacherPerformancePage = ({ user }) => {
           <p className="text-xs text-slate-500">Average Late</p>
           <p className="text-2xl font-black text-amber-700">{performance.summary.averageLateRate}%</p>
         </div>
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3">
+          <p className="text-xs text-slate-500">Total Check-in</p>
+          <p className="text-2xl font-black text-blue-700">{performance.summary.totalCheckIns}</p>
+        </div>
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-3">
+          <p className="text-xs text-slate-500">Total Check-out</p>
+          <p className="text-2xl font-black text-indigo-700">{performance.summary.totalCheckOuts}</p>
+        </div>
       </div>
 
       <Card>
@@ -177,13 +192,15 @@ const TeacherPerformancePage = ({ user }) => {
           )}
           {!loading && (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[1080px] text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                   <tr>
                     <th className="px-3 py-3 text-left">Guru</th>
                     <th className="px-3 py-3 text-left">Kelas / Mapel Terakhir</th>
                     <th className="px-3 py-3 text-right">Total Sesi</th>
                     <th className="px-3 py-3 text-right">Hadir</th>
+                    <th className="px-3 py-3 text-right">Check-in</th>
+                    <th className="px-3 py-3 text-right">Check-out</th>
                     <th className="px-3 py-3 text-right">Tidak Masuk</th>
                     <th className="px-3 py-3 text-right">Pending</th>
                     <th className="px-3 py-3 text-right">Presence</th>
@@ -199,18 +216,20 @@ const TeacherPerformancePage = ({ user }) => {
                       </td>
                       <td className="px-3 py-3 text-right font-bold">{row.total_sessions}</td>
                       <td className="px-3 py-3 text-right font-bold text-green-700">{row.hadir_sessions}</td>
+                      <td className="px-3 py-3 text-right font-bold text-blue-700">{row.check_in_sessions}</td>
+                      <td className="px-3 py-3 text-right font-bold text-indigo-700">{row.check_out_sessions}</td>
                       <td className="px-3 py-3 text-right font-bold text-amber-700">{row.tidak_masuk_sessions}</td>
                       <td className="px-3 py-3 text-right font-bold text-slate-600">{row.pending_sessions}</td>
                       <td className="px-3 py-3 text-right font-bold text-green-700">{row.presence_rate}%</td>
                       <td className="px-3 py-3 text-right font-bold text-amber-700">{row.late_rate}%</td>
                     </tr>
                   ))}
-                  {performance.rows.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="px-3 py-8 text-center text-sm text-gray-500">
-                        Belum ada data teacher performance pada rentang/filter ini.
-                      </td>
-                    </tr>
+                    {performance.rows.length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="px-3 py-8 text-center text-sm text-gray-500">
+                          Belum ada data teacher performance pada rentang/filter ini.
+                        </td>
+                      </tr>
                   )}
                 </tbody>
               </table>

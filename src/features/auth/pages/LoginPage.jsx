@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../../supabaseClient';
-import { Lock, User, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, Loader2 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
@@ -9,6 +9,7 @@ import InputField from '../../../shared/ui/InputField';
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
@@ -95,10 +96,21 @@ const Login = ({ onLogin }) => {
               </label>
               <InputField
                 icon={Lock}
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Masukkan password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                endAdornment={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                    aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                    title={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                }
                 required
               />
             </div>

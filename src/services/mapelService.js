@@ -967,7 +967,7 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
 
   let query = supabase
     .from('session')
-    .select('id, tanggal, status, waktu_check_in, schedule:schedule_id!inner(guru_id, kelas_id, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel))')
+    .select('id, tanggal, status, waktu_check_in, waktu_check_out, schedule:schedule_id!inner(guru_id, kelas_id, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel))')
     .gte('tanggal', startDate)
     .lte('tanggal', endDate)
     .order('tanggal', { ascending: false })
@@ -985,6 +985,8 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
       summary: {
         totalSessions: 0,
         totalTeachers: 0,
+        totalCheckIns: 0,
+        totalCheckOuts: 0,
         averagePresenceRate: 0,
         averageLateRate: 0,
       },
@@ -1010,6 +1012,8 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
       hadir_sessions: 0,
       tidak_masuk_sessions: 0,
       pending_sessions: 0,
+      check_in_sessions: 0,
+      check_out_sessions: 0,
       telat_sessions: 0,
       tepat_waktu_sessions: 0,
       kelas_terakhir: row.schedule?.master_kelas?.nama_kelas || '-',
@@ -1017,6 +1021,8 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
     };
 
     existing.total_sessions += 1;
+    if (row.waktu_check_in) existing.check_in_sessions += 1;
+    if (row.waktu_check_out) existing.check_out_sessions += 1;
     const status = normalizeSessionStatus(row.status);
     const hasCheckIn = Boolean(row.waktu_check_in);
     if (status === 'tidak masuk' || status === 'absent') {
@@ -1066,17 +1072,28 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
     (acc, row) => {
       acc.totalSessions += row.total_sessions;
       acc.totalTeachers += 1;
+      acc.totalCheckIns += row.check_in_sessions;
+      acc.totalCheckOuts += row.check_out_sessions;
       acc.totalPresenceRate += row.presence_rate;
       acc.totalLateRate += row.late_rate;
       return acc;
     },
-    { totalSessions: 0, totalTeachers: 0, totalPresenceRate: 0, totalLateRate: 0 },
+    {
+      totalSessions: 0,
+      totalTeachers: 0,
+      totalCheckIns: 0,
+      totalCheckOuts: 0,
+      totalPresenceRate: 0,
+      totalLateRate: 0,
+    },
   );
 
   return {
     summary: {
       totalSessions: summary.totalSessions,
       totalTeachers: summary.totalTeachers,
+      totalCheckIns: summary.totalCheckIns,
+      totalCheckOuts: summary.totalCheckOuts,
       averagePresenceRate:
         summary.totalTeachers > 0 ? Math.round((summary.totalPresenceRate / summary.totalTeachers) * 10) / 10 : 0,
       averageLateRate:
