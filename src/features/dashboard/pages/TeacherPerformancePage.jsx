@@ -103,7 +103,7 @@ const TeacherPerformancePage = ({ user }) => {
       <PageHeader className="block">
         <PageTitle className="text-2xl md:text-3xl">Teacher Performance</PageTitle>
         <PageSubtitle className="mt-2 normal-case tracking-wide text-slate-500">
-          Monitoring performa kehadiran guru mapel, check-in/out, tingkat keterlambatan, dan jumlah sesi mengajar.
+          Monitoring performa kehadiran guru mapel, check-in/out, tingkat keterlambatan (toleransi 15 menit), dan jumlah sesi mengajar.
         </PageSubtitle>
       </PageHeader>
 

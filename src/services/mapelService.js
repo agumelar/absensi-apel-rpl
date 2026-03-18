@@ -64,6 +64,7 @@ const isTimeRangeOverlap = (startA, endA, startB, endB) => startA < endB && star
 const formatTimeLabel = (timeValue) => String(timeValue ?? '').slice(0, 5);
 
 const SLA_GURU_KOSONG_MINUTES = 15;
+const LATE_CHECKIN_TOLERANCE_MINUTES = 15;
 
 const DAY_NAME_MAP = {
   minggu: 'Minggu',
@@ -1043,7 +1044,7 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
       const checkInMinutes =
         Number.parseInt(parsed.hour || '0', 10) * 60 + Number.parseInt(parsed.minute || '0', 10);
       const startMinutes = normalizeTimeToMinutes(row.schedule?.jam_mulai || '00:00', 'jam_mulai');
-      if (checkInMinutes > startMinutes + SLA_GURU_KOSONG_MINUTES) {
+      if (checkInMinutes > startMinutes + LATE_CHECKIN_TOLERANCE_MINUTES) {
         existing.telat_sessions += 1;
       } else {
         existing.tepat_waktu_sessions += 1;
