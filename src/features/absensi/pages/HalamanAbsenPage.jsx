@@ -11,6 +11,7 @@ import {
   upsertBulkAbsensi,
 } from '../../../services/absensiService';
 import { uploadBuktiAbsen } from '../../../services/supabase/storageService';
+import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -25,7 +26,7 @@ const HalamanAbsen = ({ user }) => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const tanggalHariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const tanggalHariIni = getTodayDateWIB();
       
       // FIX 1: Gunakan kelas_id dari data user yang login
       const kelasIdTarget = user?.kelas_id;
@@ -117,7 +118,7 @@ const HalamanAbsen = ({ user }) => {
       const dataSiapSimpan = Object.keys(absensi).map((siswaId) => ({
         siswa_id: siswaId,
         status: absensi[siswaId].status,
-        tanggal: new Date().toISOString().split('T')[0],
+        tanggal: getTodayDateWIB(),
         jam_hadir: absensi[siswaId].jam_hadir || null,
         bukti_url: absensi[siswaId].bukti_url || null
       }));

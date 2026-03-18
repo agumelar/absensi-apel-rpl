@@ -5,7 +5,13 @@ create table if not exists public.mapel_audit_log (
   actor_name text,
   actor_role text not null,
   action_type text not null check (
-    action_type in ('agenda_submit', 'session_check_in', 'session_check_out', 'attendance_manual_save')
+    action_type in (
+      'agenda_submit',
+      'session_check_in',
+      'session_check_out',
+      'attendance_manual_save',
+      'task_delivered_by_picket'
+    )
   ),
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc'::text, now())

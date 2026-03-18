@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { Sun, Moon, Trophy, AlertTriangle, Monitor, Loader2, Clock, Users } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { formatDateToWIB } from '../../../services/shared/dateService';
 
 const PublicMonitoring = () => {
   const [darkMode, setDarkMode] = useState(true);
@@ -52,7 +53,8 @@ const PublicMonitoring = () => {
         .sort((a, b) => b.skor - a.skor); 
       setRankingKelas(ranking);
 
-      const awalBulanIni = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      const now = new Date();
+      const awalBulanIni = formatDateToWIB(new Date(now.getFullYear(), now.getMonth(), 1));
       const { data: dataBulanIni } = await supabase.from('absensi').select('status, siswa!inner(nama_siswa, master_kelas(nama_kelas))').gte('tanggal', awalBulanIni);
 
       const rekapSiswa = {};

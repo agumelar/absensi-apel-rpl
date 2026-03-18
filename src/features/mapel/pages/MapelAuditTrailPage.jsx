@@ -8,6 +8,7 @@ import {
   searchMapelAuditActors,
 } from '../../../services/mapelService';
 import { exportJsonToExcel } from '../../../services/shared/excelService';
+import { formatDateToWIB, getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -18,6 +19,7 @@ const ACTION_OPTIONS = [
   { value: MAPEL_AUDIT_ACTION.SESSION_CHECK_IN, label: 'Check-In' },
   { value: MAPEL_AUDIT_ACTION.SESSION_CHECK_OUT, label: 'Check-Out' },
   { value: MAPEL_AUDIT_ACTION.ATTENDANCE_MANUAL_SAVE, label: 'Simpan Absensi Manual' },
+  { value: MAPEL_AUDIT_ACTION.TASK_DELIVERED_BY_PICKET, label: 'Distribusi Tugas Piket' },
 ];
 
 const humanizeAction = (actionType) => {
@@ -25,8 +27,8 @@ const humanizeAction = (actionType) => {
   return found?.label ?? actionType;
 };
 
-const getToday = () => new Date().toISOString().slice(0, 10);
-const toISODate = (dateObj) => dateObj.toISOString().slice(0, 10);
+const getToday = () => getTodayDateWIB();
+const toISODate = (dateObj) => formatDateToWIB(dateObj);
 
 const MapelAuditTrailPage = () => {
   const [loading, setLoading] = useState(false);
@@ -109,6 +111,7 @@ const MapelAuditTrailPage = () => {
       checkIn: 0,
       checkOut: 0,
       manual: 0,
+      delivery: 0,
     };
 
     rows.forEach((row) => {
@@ -116,6 +119,7 @@ const MapelAuditTrailPage = () => {
       if (row.action_type === MAPEL_AUDIT_ACTION.SESSION_CHECK_IN) counters.checkIn += 1;
       if (row.action_type === MAPEL_AUDIT_ACTION.SESSION_CHECK_OUT) counters.checkOut += 1;
       if (row.action_type === MAPEL_AUDIT_ACTION.ATTENDANCE_MANUAL_SAVE) counters.manual += 1;
+      if (row.action_type === MAPEL_AUDIT_ACTION.TASK_DELIVERED_BY_PICKET) counters.delivery += 1;
     });
     return counters;
   }, [rows]);
@@ -351,12 +355,13 @@ const MapelAuditTrailPage = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
         <div className="rounded-lg bg-slate-100 px-3 py-2 font-bold text-slate-700">Total: {summary.total}</div>
         <div className="rounded-lg bg-indigo-50 px-3 py-2 font-bold text-indigo-700">Agenda: {summary.agenda}</div>
         <div className="rounded-lg bg-green-50 px-3 py-2 font-bold text-green-700">Check-In: {summary.checkIn}</div>
         <div className="rounded-lg bg-orange-50 px-3 py-2 font-bold text-orange-700">Check-Out: {summary.checkOut}</div>
         <div className="rounded-lg bg-blue-50 px-3 py-2 font-bold text-blue-700">Manual: {summary.manual}</div>
+        <div className="rounded-lg bg-amber-50 px-3 py-2 font-bold text-amber-700">Delivery: {summary.delivery}</div>
       </div>
 
       <div className="flex flex-wrap gap-2">

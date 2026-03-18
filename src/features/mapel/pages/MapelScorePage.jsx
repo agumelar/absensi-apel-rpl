@@ -5,9 +5,15 @@ import { Save } from 'lucide-react';
 import {
   fetchDailyScoreBySession,
   fetchSessionsByTanggal,
-  upsertDailyScore,
 } from '../../../services/mapelService';
 import { fetchActiveStudentsByKelas } from '../../../services/absensiService';
+import {
+  flushMapelSyncQueue,
+  getMapelSyncQueueSummary,
+  saveBulkDailyScoreWithOfflineFallback,
+  saveDailyScoreWithOfflineFallback,
+} from '../../../services/mapelSyncQueueService';
+import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent, CardHeader, CardTitle } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -23,18 +29,22 @@ const resolveScoreDraftStorageKey = ({ userId, sessionId }) =>
   `${SCORE_DRAFT_STORAGE_KEY_PREFIX}:${userId ?? 'anonymous'}:${sessionId ?? 'none'}`;
 
 const MapelScorePage = ({ user }) => {
-  const [tanggal, setTanggal] = useState(new Date().toISOString().slice(0, 10));
+  const [tanggal, setTanggal] = useState(getTodayDateWIB());
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [students, setStudents] = useState([]);
   const [scoreDraft, setScoreDraft] = useState({});
+  const [scoreServerSnapshot, setScoreServerSnapshot] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncingQueue, setSyncingQueue] = useState(false);
+  const [syncSummary, setSyncSummary] = useState({ total: 0, attendance: 0, score: 0 });
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   const [autosaveHydrated, setAutosaveHydrated] = useState(false);
   const [savingRows, setSavingRows] = useState({});
   const [savedRows, setSavedRows] = useState({});
+  const [queuedRows, setQueuedRows] = useState({});
   const [autosaveErrorRows, setAutosaveErrorRows] = useState({});
   const autosaveTimerRef = useRef({});
   const autosaveStorageKey = useMemo(() => resolveAutosaveStorageKey(user?.id), [user?.id]);
@@ -76,6 +86,15 @@ const MapelScorePage = ({ user }) => {
     };
   }, [students, scoreDraft]);
 
+  const refreshSyncSummary = () => {
+    try {
+      setSyncSummary(getMapelSyncQueueSummary());
+    } catch (error) {
+      console.error('Gagal membaca queue mapel:', error);
+      setSyncSummary({ total: 0, attendance: 0, score: 0 });
+    }
+  };
+
   const loadSessions = async () => {
     const sessionRows = await fetchSessionsByTanggal(tanggal);
     setSessions(sessionRows);
@@ -103,6 +122,7 @@ const MapelScorePage = ({ user }) => {
       if (!selectedSession?.schedule?.kelas_id || !selectedSession?.id) {
         setStudents([]);
         setScoreDraft({});
+        setScoreServerSnapshot({});
         return;
       }
 
@@ -128,11 +148,16 @@ const MapelScorePage = ({ user }) => {
       }
 
       setStudents(studentRows);
+      setScoreServerSnapshot(scoreMap);
       setScoreDraft({ ...scoreMap, ...localDraft });
     };
 
     loadStudentsAndScore().catch((error) => Swal.fire('Gagal', error.message, 'error'));
   }, [selectedSession?.id, selectedSession?.schedule?.kelas_id, scoreDraftStorageKey]);
+
+  useEffect(() => {
+    refreshSyncSummary();
+  }, []);
 
   useEffect(() => {
     if (!selectedSession?.id) return;
@@ -176,6 +201,65 @@ const MapelScorePage = ({ user }) => {
     };
   }, []);
 
+  const refreshScoreFromServer = async () => {
+    if (!selectedSession?.id) return;
+    const scoreRows = await fetchDailyScoreBySession(selectedSession.id);
+    const nextServer = {};
+    scoreRows.forEach((row) => {
+      nextServer[row.siswa_id] = {
+        nilai: row.nilai === null || row.nilai === undefined ? '' : String(row.nilai),
+        catatan: row.catatan ?? '',
+      };
+    });
+    setScoreServerSnapshot(nextServer);
+    setScoreDraft((prev) => ({ ...nextServer, ...prev }));
+  };
+
+  const handleFlushSyncQueue = async ({ showSuccessAlert = true } = {}) => {
+    try {
+      setSyncingQueue(true);
+      const result = await flushMapelSyncQueue();
+      refreshSyncSummary();
+      if (result.syncedCount > 0 && selectedSession?.id) {
+        await refreshScoreFromServer();
+      }
+      if (showSuccessAlert) {
+        if (result.skippedOffline) {
+          await Swal.fire('Offline', 'Masih offline. Queue akan dikirim saat online.', 'info');
+        } else if (result.syncedCount > 0) {
+          const conflictInfo =
+            result.conflictCount > 0
+              ? ` (${result.conflictCount} konflik diselesaikan dengan aturan local-last-write).`
+              : '.';
+          await Swal.fire('Sinkronisasi selesai', `Berhasil sinkron ${result.syncedCount} item${conflictInfo}`, 'success');
+        } else {
+          await Swal.fire('Info', 'Tidak ada item queue yang perlu disinkronkan.', 'info');
+        }
+      } else if (result.conflictCount > 0) {
+        await Swal.fire(
+          'Konflik terselesaikan',
+          `${result.conflictCount} item queue diselesaikan dengan aturan local-last-write.`,
+          'warning',
+        );
+      }
+    } catch (error) {
+      await Swal.fire('Gagal sinkronisasi', error.message, 'error');
+    } finally {
+      setSyncingQueue(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = () => {
+      handleFlushSyncQueue({ showSuccessAlert: false }).catch((error) => {
+        console.error('Auto sync queue nilai gagal:', error);
+      });
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSession?.id]);
+
   const handleDraftChange = (siswaId, key, value) => {
     let nextEntry = null;
     setScoreDraft((prev) => {
@@ -197,6 +281,10 @@ const MapelScorePage = ({ user }) => {
       ...prev,
       [siswaId]: false,
     }));
+    setQueuedRows((prev) => ({
+      ...prev,
+      [siswaId]: false,
+    }));
 
     if (!autosaveEnabled || !selectedSession?.id || !nextEntry) return;
     if (autosaveTimerRef.current[siswaId]) {
@@ -210,7 +298,24 @@ const MapelScorePage = ({ user }) => {
         const payload = validateEntry(student, nextEntry);
         if (!payload) return;
         setSavingRows((prev) => ({ ...prev, [siswaId]: true }));
-        await upsertDailyScore(payload);
+        const result = await saveDailyScoreWithOfflineFallback({
+          ...payload,
+          base: scoreServerSnapshot[siswaId] || {},
+        });
+        refreshSyncSummary();
+        if (result.mode === 'queued') {
+          setQueuedRows((prev) => ({ ...prev, [siswaId]: true }));
+          setSavedRows((prev) => ({ ...prev, [siswaId]: false }));
+          return;
+        }
+        setQueuedRows((prev) => ({ ...prev, [siswaId]: false }));
+        setScoreServerSnapshot((prev) => ({
+          ...prev,
+          [siswaId]: {
+            nilai: payload.nilai === null || payload.nilai === undefined ? '' : String(payload.nilai),
+            catatan: payload.catatan ?? '',
+          },
+        }));
         setSavedRows((prev) => ({ ...prev, [siswaId]: true }));
         setAutosaveErrorRows((prev) => ({ ...prev, [siswaId]: false }));
       } catch {
@@ -260,7 +365,50 @@ const MapelScorePage = ({ user }) => {
       }
 
       setSaving(true);
-      await Promise.all(payload.map((item) => upsertDailyScore(item)));
+      const baseMap = payload.reduce((acc, item) => {
+        acc[item.siswaId] = scoreServerSnapshot[item.siswaId] || {};
+        return acc;
+      }, {});
+      const result = await saveBulkDailyScoreWithOfflineFallback({ entries: payload, baseMap });
+      refreshSyncSummary();
+      if (result.mode === 'queued') {
+        setQueuedRows((prev) =>
+          payload.reduce(
+            (acc, item) => ({
+              ...acc,
+              [item.siswaId]: true,
+            }),
+            prev,
+          ),
+        );
+        Swal.fire(
+          'Tersimpan lokal',
+          'Koneksi tidak stabil/offline. Nilai masuk queue lokal dan akan disinkron saat online.',
+          'warning',
+        );
+        return;
+      }
+      setQueuedRows((prev) =>
+        payload.reduce(
+          (acc, item) => ({
+            ...acc,
+            [item.siswaId]: false,
+          }),
+          prev,
+        ),
+      );
+      setScoreServerSnapshot((prev) =>
+        payload.reduce(
+          (acc, item) => ({
+            ...acc,
+            [item.siswaId]: {
+              nilai: item.nilai === null || item.nilai === undefined ? '' : String(item.nilai),
+              catatan: item.catatan ?? '',
+            },
+          }),
+          prev,
+        ),
+      );
       setSavedRows((prev) =>
         payload.reduce(
           (acc, item) => ({
@@ -296,7 +444,34 @@ const MapelScorePage = ({ user }) => {
         ...prev,
         [student.id]: true,
       }));
-      await upsertDailyScore(payload);
+      const result = await saveDailyScoreWithOfflineFallback({
+        ...payload,
+        base: scoreServerSnapshot[student.id] || {},
+      });
+      refreshSyncSummary();
+      if (result.mode === 'queued') {
+        setQueuedRows((prev) => ({
+          ...prev,
+          [student.id]: true,
+        }));
+        setSavedRows((prev) => ({
+          ...prev,
+          [student.id]: false,
+        }));
+        Swal.fire('Tersimpan lokal', 'Nilai disimpan ke queue lokal dan akan disinkron saat online.', 'warning');
+        return;
+      }
+      setQueuedRows((prev) => ({
+        ...prev,
+        [student.id]: false,
+      }));
+      setScoreServerSnapshot((prev) => ({
+        ...prev,
+        [student.id]: {
+          nilai: payload.nilai === null || payload.nilai === undefined ? '' : String(payload.nilai),
+          catatan: payload.catatan ?? '',
+        },
+      }));
       setSavedRows((prev) => ({
         ...prev,
         [student.id]: true,
@@ -326,6 +501,13 @@ const MapelScorePage = ({ user }) => {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={() => setAutosaveEnabled((prev) => !prev)}>
             Auto-save: {autosaveEnabled ? 'ON' : 'OFF'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => handleFlushSyncQueue({ showSuccessAlert: true })}
+            disabled={syncingQueue || syncSummary.total === 0}
+          >
+            {syncingQueue ? 'Sinkronisasi...' : `Sinkron Offline (${syncSummary.total})`}
           </Button>
           <Button onClick={handleSave} disabled={saving || loading || !selectedSessionId}>
             <Save size={16} />
@@ -394,6 +576,11 @@ const MapelScorePage = ({ user }) => {
           <p className="text-xs font-medium text-slate-500">
             Auto-save saat ini: <span className="font-semibold text-slate-700">{autosaveEnabled ? 'Aktif' : 'Nonaktif'}</span>
           </p>
+          {syncSummary.total > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+              Ada {syncSummary.total} item pending sinkronisasi ({syncSummary.attendance} absensi, {syncSummary.score} nilai).
+            </p>
+          )}
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
@@ -446,6 +633,9 @@ const MapelScorePage = ({ user }) => {
                           {savingRows[student.id] ? 'Menyimpan...' : 'Simpan'}
                         </Button>
                         {savedRows[student.id] && <span className="text-xs font-semibold text-emerald-600">Tersimpan</span>}
+                        {queuedRows[student.id] && (
+                          <span className="text-xs font-semibold text-amber-600">Pending Sync</span>
+                        )}
                         {autosaveErrorRows[student.id] && (
                           <span className="text-xs font-semibold text-rose-600">Auto-save gagal</span>
                         )}

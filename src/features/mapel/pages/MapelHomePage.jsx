@@ -9,6 +9,7 @@ import {
 } from '../../../shared/constants/routes';
 import { isMapelAuditRole, normalizeRole } from '../../../shared/constants/roles';
 import { fetchSchedulesByGuru, fetchSessionsByTanggal } from '../../../services/mapelService';
+import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -18,14 +19,17 @@ const MapelHomePage = ({ user }) => {
   const [todaySummary, setTodaySummary] = useState({ jadwal: 0, sesi: 0, hadir: 0, tidakMasuk: 0 });
   const role = normalizeRole(user?.role);
   const canOpenAudit = isMapelAuditRole(role);
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => getTodayDateWIB(), []);
 
   useEffect(() => {
     const loadSummary = async () => {
       if (!user?.id) return;
       const [schedules, sessions] = await Promise.all([fetchSchedulesByGuru(user.id), fetchSessionsByTanggal(today)]);
       const hadir = sessions.filter((item) => String(item.status || '').toLowerCase() === 'hadir').length;
-      const tidakMasuk = sessions.filter((item) => String(item.status || '').toLowerCase() === 'tidak_masuk').length;
+      const tidakMasuk = sessions.filter((item) => {
+        const status = String(item.status || '').toLowerCase();
+        return status === 'tidak_masuk' || status === 'tidak masuk' || status === 'absent';
+      }).length;
       setTodaySummary({
         jadwal: schedules.length,
         sesi: sessions.length,

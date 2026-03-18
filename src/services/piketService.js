@@ -47,7 +47,7 @@ export const fetchPiketLogByTanggal = async (tanggal) => {
       ...log,
       nama_siswa: log.siswa?.nama_siswa,
       nama_kelas: log.siswa?.master_kelas?.nama_kelas,
-      tanggal_log: new Date(log.created_at).toISOString().split('T')[0],
+      tanggal_log: new Date(log.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }),
     }))
     .filter((log) => log.tanggal_log === tanggal);
 };

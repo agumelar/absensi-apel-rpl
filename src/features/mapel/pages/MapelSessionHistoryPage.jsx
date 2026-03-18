@@ -7,17 +7,13 @@ import {
   fetchStudentAttendanceBySession,
   fetchTeacherAbsenceTaskBySession,
 } from '../../../services/mapelService';
+import { getDateDaysAgoWIB, getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent, CardHeader, CardTitle } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
-const getToday = () => new Date().toISOString().slice(0, 10);
-
-const getLast7DaysDate = () => {
-  const date = new Date();
-  date.setDate(date.getDate() - 6);
-  return date.toISOString().slice(0, 10);
-};
+const getToday = () => getTodayDateWIB();
+const getLast7DaysDate = () => getDateDaysAgoWIB(6);
 
 const MapelSessionHistoryPage = () => {
   const [fromDate, setFromDate] = useState(getLast7DaysDate());
@@ -32,7 +28,7 @@ const MapelSessionHistoryPage = () => {
     rows.forEach((row) => {
       const status = String(row.status || '').toLowerCase();
       if (status === 'hadir') acc.hadir += 1;
-      else if (status === 'tidak_masuk') acc.tidakMasuk += 1;
+      else if (status === 'tidak_masuk' || status === 'tidak masuk' || status === 'absent') acc.tidakMasuk += 1;
       else acc.pending += 1;
     });
     return acc;
@@ -67,10 +63,10 @@ const MapelSessionHistoryPage = () => {
       const attendanceSummary = attendanceRows.reduce(
         (acc, item) => {
           const key = String(item.status || '').toUpperCase();
-          if (key === 'HADIR') acc.H += 1;
-          if (key === 'SAKIT') acc.S += 1;
-          if (key === 'IZIN') acc.I += 1;
-          if (key === 'ALPHA') acc.A += 1;
+          if (key === 'HADIR' || key === 'H') acc.H += 1;
+          if (key === 'SAKIT' || key === 'S') acc.S += 1;
+          if (key === 'IZIN' || key === 'I') acc.I += 1;
+          if (key === 'ALPHA' || key === 'A') acc.A += 1;
           return acc;
         },
         { H: 0, S: 0, I: 0, A: 0 },

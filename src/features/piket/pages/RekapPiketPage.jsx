@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { Search, Calendar, Printer, Loader2 } from 'lucide-react';
 import { fetchPiketLogByTanggal } from '../../../services/piketService';
 import { printPiketReceipt } from '../../../services/piketPrintService';
+import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
@@ -9,7 +10,7 @@ const RekapPiket = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterTanggal, setFilterTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [filterTanggal, setFilterTanggal] = useState(getTodayDateWIB());
   const [stats, setStats] = useState({ keluar: 0, pulang: 0, masuk: 0 });
 
   const fetchLogs = useCallback(async () => {

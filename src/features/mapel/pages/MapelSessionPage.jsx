@@ -15,11 +15,16 @@ import {
   hasSubmittedAgenda,
   markSessionTidakMasuk,
   upsertClassAgenda,
-  upsertBulkStudentAttendanceMapel,
 } from '../../../services/mapelService';
 import { uploadBuktiAbsen, uploadMapelSessionPhoto } from '../../../services/supabase/storageService';
 import { compressImageExtreme } from '../../../shared/utils/compressor';
 import { fetchActiveStudentsByKelas } from '../../../services/absensiService';
+import {
+  flushMapelSyncQueue,
+  getMapelSyncQueueSummary,
+  saveAttendanceWithOfflineFallback,
+} from '../../../services/mapelSyncQueueService';
+import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -28,6 +33,15 @@ const QR_READER_ELEMENT_ID = 'mapel-qr-reader';
 const ATTENDANCE_DRAFT_KEY_PREFIX = 'mapel_attendance_draft';
 const buildAttendanceDraftKey = ({ userId, sessionId }) =>
   `${ATTENDANCE_DRAFT_KEY_PREFIX}:${userId ?? 'anonymous'}:${sessionId ?? 'none'}`;
+
+const normalizeAttendanceCode = (statusValue) => {
+  const statusLabel = String(statusValue || '').trim().toUpperCase();
+  if (statusLabel === 'HADIR' || statusLabel === 'H') return 'H';
+  if (statusLabel === 'SAKIT' || statusLabel === 'S') return 'S';
+  if (statusLabel === 'IZIN' || statusLabel === 'I') return 'I';
+  if (statusLabel === 'ALPHA' || statusLabel === 'A') return 'A';
+  return statusValue;
+};
 
 const MapelSessionPage = ({ user }) => {
   const [schedules, setSchedules] = useState([]);
@@ -39,7 +53,10 @@ const MapelSessionPage = ({ user }) => {
   const [agendaSubmitted, setAgendaSubmitted] = useState(false);
   const [students, setStudents] = useState([]);
   const [attendanceDraft, setAttendanceDraft] = useState({});
+  const [attendanceServerSnapshot, setAttendanceServerSnapshot] = useState({});
   const [savingAttendance, setSavingAttendance] = useState(false);
+  const [syncingQueue, setSyncingQueue] = useState(false);
+  const [syncSummary, setSyncSummary] = useState({ total: 0, attendance: 0, score: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
@@ -53,7 +70,7 @@ const MapelSessionPage = ({ user }) => {
   const qrScanLockRef = useRef(false);
   const qrLastDecodedRef = useRef('');
   const guruId = user?.id;
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => getTodayDateWIB(), []);
 
   const loadData = useCallback(async () => {
     if (!guruId) return;
@@ -110,6 +127,15 @@ const MapelSessionPage = ({ user }) => {
     A: 'bg-rose-600 text-white',
   };
 
+  const refreshSyncSummary = useCallback(() => {
+    try {
+      setSyncSummary(getMapelSyncQueueSummary());
+    } catch (error) {
+      console.error('Gagal membaca queue mapel:', error);
+      setSyncSummary({ total: 0, attendance: 0, score: 0 });
+    }
+  }, []);
+
   useEffect(() => {
     const loadAgenda = async () => {
       if (!currentSession?.id) {
@@ -137,6 +163,7 @@ const MapelSessionPage = ({ user }) => {
       if (!selectedSchedule?.kelas_id) {
         setStudents([]);
         setAttendanceDraft({});
+        setAttendanceServerSnapshot({});
         setAbsenceTask(null);
         return;
       }
@@ -146,6 +173,7 @@ const MapelSessionPage = ({ user }) => {
 
       if (!currentSession?.id) {
         setAttendanceDraft({});
+        setAttendanceServerSnapshot({});
         setAbsenceTask(null);
         return;
       }
@@ -156,19 +184,10 @@ const MapelSessionPage = ({ user }) => {
       ]);
       const map = {};
       existing.forEach((item) => {
-        const statusLabel = String(item.status || '').toUpperCase();
-        map[item.siswa_id] =
-          statusLabel === 'HADIR'
-            ? 'H'
-            : statusLabel === 'SAKIT'
-              ? 'S'
-              : statusLabel === 'IZIN'
-                ? 'I'
-                : statusLabel === 'ALPHA'
-                  ? 'A'
-                  : item.status;
+        map[item.siswa_id] = normalizeAttendanceCode(item.status);
       });
       setAbsenceTask(task);
+      setAttendanceServerSnapshot(map);
 
       let localDraft = {};
       try {
@@ -183,6 +202,68 @@ const MapelSessionPage = ({ user }) => {
 
     loadStudentsAndAttendance().catch((error) => Swal.fire('Gagal', error.message, 'error'));
   }, [selectedSchedule?.kelas_id, currentSession?.id, attendanceDraftStorageKey]);
+
+  useEffect(() => {
+    refreshSyncSummary();
+  }, [refreshSyncSummary]);
+
+  const refreshAttendanceFromServer = useCallback(async () => {
+    if (!currentSession?.id) return;
+    const existing = await fetchStudentAttendanceBySession(currentSession.id);
+    const map = {};
+    existing.forEach((item) => {
+      map[item.siswa_id] = normalizeAttendanceCode(item.status);
+    });
+    setAttendanceDraft(map);
+    setAttendanceServerSnapshot(map);
+  }, [currentSession?.id]);
+
+  const handleFlushSyncQueue = useCallback(
+    async ({ showSuccessAlert = true } = {}) => {
+      try {
+        setSyncingQueue(true);
+        const result = await flushMapelSyncQueue();
+        refreshSyncSummary();
+        if (result.syncedCount > 0 && currentSession?.id) {
+          await refreshAttendanceFromServer();
+        }
+        if (showSuccessAlert) {
+          if (result.skippedOffline) {
+            await Swal.fire('Offline', 'Masih offline. Queue akan dikirim saat koneksi kembali.', 'info');
+          } else if (result.syncedCount > 0) {
+            const conflictInfo =
+              result.conflictCount > 0
+                ? ` (${result.conflictCount} konflik diselesaikan dengan aturan local-last-write).`
+                : '.';
+            await Swal.fire('Sinkronisasi selesai', `Berhasil sinkron ${result.syncedCount} item${conflictInfo}`, 'success');
+          } else {
+            await Swal.fire('Info', 'Tidak ada item queue yang perlu disinkronkan.', 'info');
+          }
+        } else if (result.conflictCount > 0) {
+          await Swal.fire(
+            'Konflik terselesaikan',
+            `${result.conflictCount} item queue diselesaikan dengan aturan local-last-write.`,
+            'warning',
+          );
+        }
+      } catch (error) {
+        await Swal.fire('Gagal sinkronisasi', error.message, 'error');
+      } finally {
+        setSyncingQueue(false);
+      }
+    },
+    [currentSession?.id, refreshAttendanceFromServer, refreshSyncSummary],
+  );
+
+  useEffect(() => {
+    const handleOnline = () => {
+      handleFlushSyncQueue({ showSuccessAlert: false }).catch((error) => {
+        console.error('Auto sync queue gagal:', error);
+      });
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [handleFlushSyncQueue]);
 
   useEffect(() => {
     if (!currentSession?.id) return;
@@ -521,27 +602,24 @@ const MapelSessionPage = ({ user }) => {
 
     try {
       setSavingAttendance(true);
-      await upsertBulkStudentAttendanceMapel(entries, {
-        source: 'manual_click',
+      const result = await saveAttendanceWithOfflineFallback({
+        sessionId: currentSession.id,
+        entries,
         actorName: user?.nama_lengkap,
+        source: 'manual_click',
+        baseMap: attendanceServerSnapshot,
       });
-      Swal.fire('Berhasil', 'Absensi manual berhasil disimpan.', 'success');
-      const existing = await fetchStudentAttendanceBySession(currentSession.id);
-      const map = {};
-      existing.forEach((item) => {
-        const statusLabel = String(item.status || '').toUpperCase();
-        map[item.siswa_id] =
-          statusLabel === 'HADIR'
-            ? 'H'
-            : statusLabel === 'SAKIT'
-              ? 'S'
-              : statusLabel === 'IZIN'
-                ? 'I'
-                : statusLabel === 'ALPHA'
-                  ? 'A'
-                  : item.status;
-      });
-      setAttendanceDraft(map);
+      refreshSyncSummary();
+      if (result.mode === 'queued') {
+        Swal.fire(
+          'Tersimpan lokal',
+          'Koneksi tidak stabil/offline. Absensi disimpan ke queue lokal dan akan disinkron saat online.',
+          'warning',
+        );
+      } else {
+        await refreshAttendanceFromServer();
+        Swal.fire('Berhasil', 'Absensi manual berhasil disimpan.', 'success');
+      }
     } catch (error) {
       Swal.fire('Gagal', error.message, 'error');
     } finally {
@@ -752,7 +830,21 @@ const MapelSessionPage = ({ user }) => {
           >
             {savingAttendance ? 'Menyimpan...' : 'Simpan Absensi Manual'}
           </Button>
+          <Button
+            onClick={() => handleFlushSyncQueue({ showSuccessAlert: true })}
+            disabled={syncingQueue || syncSummary.total === 0}
+            size="sm"
+            variant="secondary"
+            className="uppercase tracking-wide"
+          >
+            {syncingQueue ? 'Sinkronisasi...' : `Sinkron Offline (${syncSummary.total})`}
+          </Button>
         </div>
+        {syncSummary.total > 0 && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+            Ada {syncSummary.total} item pending sinkronisasi ({syncSummary.attendance} absensi, {syncSummary.score} nilai).
+          </p>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
           <div className="rounded-lg bg-blue-600 px-3 py-2 font-bold text-white">H: {attendanceSummary.H}</div>
