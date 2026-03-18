@@ -1,5 +1,6 @@
 export const PUBLIC_MONITORING_ROUTE = '/monitoring';
 export const DASHBOARD_ROUTE = '/dashboard';
+export const TEACHER_PERFORMANCE_ROUTE = '/teacher-performance';
 export const PIKET_DASHBOARD_ROUTE = '/piket-dashboard';
 export const APP_SWITCHER_ROUTE = '/portal';
 export const MAPEL_DASHBOARD_ROUTE = '/mapel';

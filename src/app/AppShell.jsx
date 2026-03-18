@@ -31,6 +31,7 @@ import {
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
+  TEACHER_PERFORMANCE_ROUTE,
 } from '../shared/constants/routes';
 import Button from '../shared/ui/Button';
 import { cn } from '../shared/ui/cn';
@@ -89,6 +90,9 @@ const AppShell = ({
       : isMapelWorkspace && canAccessMapel
         ? { to: MAPEL_DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard Mapel' }
         : { to: DASHBOARD_ROUTE, icon: LayoutDashboard, label: isExec ? 'Executive Control' : 'Dashboard' },
+    ...(!isMapelWorkspace && isExec
+      ? [{ to: TEACHER_PERFORMANCE_ROUTE, icon: BarChart3, label: 'Teacher Performance' }]
+      : []),
     ...(!isMapelWorkspace && canAccessMapelAudit
       ? [{ to: MAPEL_AUDIT_ROUTE, icon: FileSearch, label: 'Audit Trail Mapel' }]
       : []),
@@ -183,7 +187,7 @@ const AppShell = ({
             </div>
           )}
 
-          {isWalas && (
+          {isWalas && !isMapelWorkspace && (
             <div className="space-y-2">
               <SectionLabel>Operasional</SectionLabel>
               <div className="space-y-1">
@@ -197,7 +201,7 @@ const AppShell = ({
             </div>
           )}
 
-          {isWalas && (
+          {isWalas && !isMapelWorkspace && (
             <div className="space-y-2">
               <SectionLabel>Laporan</SectionLabel>
               <div className="space-y-1">

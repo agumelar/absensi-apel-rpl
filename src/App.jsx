@@ -88,6 +88,7 @@ const App = () => {
 
   const handleLoginSuccess = (data) => {
     const sessionPayload = persistSession(data);
+    window.history.replaceState(null, '', '/');
     setUserData(sessionPayload);
     setIsLoggedIn(true);
   };

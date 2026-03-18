@@ -24,6 +24,7 @@ export const createSessionPayload = (userData) => {
     nama_lengkap: userData?.nama_lengkap ?? '',
     username: userData?.username ?? '',
     kelas_id: userData?.kelas_id ?? null,
+    jurusan_id: userData?.jurusan_id ?? null,
     issued_at: issuedAt,
     expires_at: expiresAt,
     session_version: SESSION_VERSION,

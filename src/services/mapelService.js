@@ -169,6 +169,20 @@ const recordMapelAuditLog = async ({ sessionId, actionType, metadata, actorName 
   if (error) throw error;
 };
 
+const isAuditActionConstraintMismatch = (error) => {
+  if (String(error?.code || '') !== '23514') return false;
+
+  const constraint = String(error?.constraint || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  const details = String(error?.details || '').toLowerCase();
+
+  return (
+    constraint.includes('mapel_audit_log_action_type_check') ||
+    message.includes('mapel_audit_log_action_type_check') ||
+    details.includes('mapel_audit_log_action_type_check')
+  );
+};
+
 export const validateScheduleConflict = async ({ guruId, hari, jamMulai, jamSelesai, excludeScheduleId }) => {
   assertRequired('guruId', guruId);
   assertRequired('hari', hari);
@@ -664,18 +678,32 @@ export const markTeacherAbsenceTaskDelivered = async (taskId) => {
   if (!data?.session_id) {
     throw new Error('Task pengganti tidak valid.');
   }
-  await recordMapelAuditLog({
-    sessionId: data.session_id,
-    actionType: MAPEL_AUDIT_ACTION.TASK_DELIVERED_BY_PICKET,
-    actorName: actor.nama_lengkap || actor.username || 'Piket',
-    metadata: {
-      source: 'piket_delivery',
-      task_id: data.id,
-      delivered_by_picket: true,
-      delivered_at: data.delivered_at ?? null,
-    },
-  });
-  return data;
+  let auditWarning = null;
+  try {
+    await recordMapelAuditLog({
+      sessionId: data.session_id,
+      actionType: MAPEL_AUDIT_ACTION.TASK_DELIVERED_BY_PICKET,
+      actorName: actor.nama_lengkap || actor.username || 'Piket',
+      metadata: {
+        source: 'piket_delivery',
+        task_id: data.id,
+        delivered_by_picket: true,
+        delivered_at: data.delivered_at ?? null,
+      },
+    });
+  } catch (error) {
+    if (!isAuditActionConstraintMismatch(error)) {
+      throw error;
+    }
+
+    auditWarning =
+      'Distribusi berhasil, tetapi audit action belum didukung skema DB. Jalankan migrasi update_mapel_audit_log_actions.sql.';
+  }
+
+  return {
+    ...data,
+    audit_warning: auditWarning,
+  };
 };
 
 export const fetchTeacherAbsenceTaskBySession = async (sessionId) => {
@@ -1174,6 +1202,139 @@ export const fetchMapelAuditTrail = async ({
 
   return {
     rows,
+    total: count || 0,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages: Math.max(1, Math.ceil((count || 0) / safePageSize)),
+  };
+};
+
+export const fetchMapelAuditSessionSummary = async ({
+  fromDate,
+  toDate,
+  kelasId,
+  mapelId,
+  page = 1,
+  pageSize = 20,
+} = {}) => {
+  const session = getSessionOrThrow();
+  const role = normalizeRole(session.role);
+  const canReadGlobal = isMapelAuditRole(role);
+
+  if (!canReadGlobal) {
+    throw new Error('Akses audit trail mapel ditolak untuk role ini.');
+  }
+
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(Math.floor(pageSize), 200) : 20;
+  const from = (safePage - 1) * safePageSize;
+  const to = from + safePageSize - 1;
+
+  let query = supabase
+    .from('session')
+    .select(
+      'id, tanggal, status, waktu_check_in, foto_check_in, waktu_check_out, foto_check_out, schedule:schedule_id!inner(id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel, kode_mapel))',
+      { count: 'exact' },
+    )
+    .order('tanggal', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (fromDate) {
+    query = query.gte('tanggal', fromDate);
+  }
+  if (toDate) {
+    query = query.lte('tanggal', toDate);
+  }
+  if (kelasId) {
+    query = query.eq('schedule.kelas_id', Number(kelasId));
+  }
+  if (mapelId) {
+    query = query.eq('schedule.mapel_id', Number(mapelId));
+  }
+
+  const { data: sessionRows, error: sessionError, count } = await query;
+  if (sessionError) throw sessionError;
+
+  const rows = sessionRows || [];
+  if (rows.length === 0) {
+    return {
+      rows: [],
+      total: count || 0,
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages: Math.max(1, Math.ceil((count || 0) / safePageSize)),
+    };
+  }
+
+  const sessionIds = rows.map((row) => row.id);
+  const guruIds = [...new Set(rows.map((row) => row.schedule?.guru_id).filter(Boolean))];
+
+  const [
+    { data: agendaRows, error: agendaError },
+    { data: attendanceRows, error: attendanceError },
+    { data: absenceTaskRows, error: taskError },
+    { data: guruRows, error: guruError },
+  ] = await Promise.all([
+    supabase.from('class_agenda').select('session_id, topik, metode').in('session_id', sessionIds),
+    supabase.from('student_attendance_mapel').select('session_id, status').in('session_id', sessionIds),
+    supabase
+      .from('teacher_absence_task')
+      .select('session_id, instruksi, file_path, delivered_by_picket, delivered_at')
+      .in('session_id', sessionIds),
+    guruIds.length
+      ? supabase.from('walikelas').select('id, nama_lengkap').in('id', guruIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (agendaError) throw agendaError;
+  if (attendanceError) throw attendanceError;
+  if (taskError) throw taskError;
+  if (guruError) throw guruError;
+
+  const agendaMap = new Map((agendaRows || []).map((row) => [String(row.session_id), row]));
+  const taskMap = new Map((absenceTaskRows || []).map((row) => [String(row.session_id), row]));
+  const guruMap = new Map((guruRows || []).map((row) => [String(row.id), row.nama_lengkap]));
+
+  const attendanceMap = new Map();
+  (attendanceRows || []).forEach((row) => {
+    const key = String(row.session_id);
+    const existing = attendanceMap.get(key) || { hadir: 0, sakit: 0, izin: 0, alpha: 0, total: 0 };
+    const normalizedStatus = ATTENDANCE_STATUS_MAP[String(row.status || '').trim().toUpperCase()] || String(row.status || '');
+    if (normalizedStatus === 'Hadir') existing.hadir += 1;
+    if (normalizedStatus === 'Sakit') existing.sakit += 1;
+    if (normalizedStatus === 'Izin') existing.izin += 1;
+    if (normalizedStatus === 'Alpha') existing.alpha += 1;
+    existing.total += 1;
+    attendanceMap.set(key, existing);
+  });
+
+  const normalizedRows = rows.map((row) => {
+    const schedule = row.schedule || {};
+    const summary = attendanceMap.get(String(row.id)) || { hadir: 0, sakit: 0, izin: 0, alpha: 0, total: 0 };
+    const agenda = agendaMap.get(String(row.id)) || null;
+    const absenceTask = taskMap.get(String(row.id)) || null;
+    const jamMulai = String(schedule.jam_mulai || '').slice(0, 5);
+    const jamSelesai = String(schedule.jam_selesai || '').slice(0, 5);
+
+    return {
+      ...row,
+      guru_id: schedule.guru_id ?? null,
+      guru_nama: guruMap.get(String(schedule.guru_id || '')) || 'Guru',
+      kelas_nama: schedule.master_kelas?.nama_kelas || '-',
+      mapel_nama: schedule.master_mapel?.nama_mapel || '-',
+      mapel_kode: schedule.master_mapel?.kode_mapel || '-',
+      hari: schedule.hari || '-',
+      jam_label: jamMulai && jamSelesai ? `${jamMulai}-${jamSelesai}` : '-',
+      agenda_topik: agenda?.topik || '-',
+      agenda_metode: agenda?.metode || '-',
+      attendance_summary: summary,
+      absence_task: absenceTask,
+    };
+  });
+
+  return {
+    rows: normalizedRows,
     total: count || 0,
     page: safePage,
     pageSize: safePageSize,

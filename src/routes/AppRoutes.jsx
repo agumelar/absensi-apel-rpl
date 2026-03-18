@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import Dashboard from '../features/dashboard/pages/DashboardPage';
 import ExecutiveDashboard from '../features/dashboard/pages/ExecutiveDashboardPage';
 import PortalWorkspacePage from '../features/dashboard/pages/PortalWorkspacePage';
+import TeacherPerformancePage from '../features/dashboard/pages/TeacherPerformancePage';
 import PiketDashboard from '../features/piket/pages/PiketDashboardPage';
 import PiketInput from '../features/piket/pages/PiketInputPage';
 import RekapPiket from '../features/piket/pages/RekapPiketPage';
@@ -32,6 +33,7 @@ import {
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
+  TEACHER_PERFORMANCE_ROUTE,
 } from '../shared/constants/routes';
 
 const AppRoutes = ({
@@ -67,6 +69,14 @@ const AppRoutes = ({
         element={
           <RequireRole allow={hasMultiWorkspace} redirectTo={singleWorkspaceRoute}>
             <PortalWorkspacePage canAccessMapel={canAccessMapel} apelWorkspaceRoute={singleWorkspaceRoute} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={TEACHER_PERFORMANCE_ROUTE}
+        element={
+          <RequireRole allow={isExec}>
+            <TeacherPerformancePage user={userData} />
           </RequireRole>
         }
       />

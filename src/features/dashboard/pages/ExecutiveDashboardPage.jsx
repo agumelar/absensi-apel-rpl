@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { exportJsonToExcel } from '../../../services/shared/excelService';
-import { fetchMapelTeacherPerformance } from '../../../services/mapelService';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
+import Swal from 'sweetalert2';
 
 const ExecutiveDashboard = ({ user }) => {
   const [activeTab, setActiveTab] = useState('monitoring');
@@ -34,11 +34,6 @@ const ExecutiveDashboard = ({ user }) => {
   const [ewsSiswa, setEwsSiswa] = useState([]);
   const [dataAkumulasi, setDataAkumulasi] = useState([]);
   const [weeklyStats, setWeeklyStats] = useState({ topLateSiswa: [], goldenClass: null });
-  const [mapelRangeDays, setMapelRangeDays] = useState(7);
-  const [mapelPerformance, setMapelPerformance] = useState({
-    summary: { totalSessions: 0, totalTeachers: 0, averagePresenceRate: 0, averageLateRate: 0 },
-    rows: [],
-  });
 
   const userRole = user?.role?.toLowerCase();
   const isKaprog = userRole === 'kaprog';
@@ -89,16 +84,39 @@ const ExecutiveDashboard = ({ user }) => {
       }
 
       // 1. QUERY KELAS
+      let kaprogJurusanId = Number.parseInt(user?.jurusan_id, 10);
+      if (isKaprog && (!Number.isInteger(kaprogJurusanId) || kaprogJurusanId <= 0)) {
+        const kaprogId = user?.walikelas_id || user?.id;
+        if (kaprogId) {
+          const { data: kaprogRow, error: kaprogError } = await supabase
+            .from('walikelas')
+            .select('jurusan_id')
+            .eq('id', kaprogId)
+            .maybeSingle();
+          if (kaprogError) throw kaprogError;
+          kaprogJurusanId = Number.parseInt(kaprogRow?.jurusan_id, 10);
+        }
+      }
+
       let queryKelas = supabase.from('master_kelas').select('id, nama_kelas, jurusan_id');
-      if (isKaprog) queryKelas = queryKelas.eq('jurusan_id', parseInt(user?.jurusan_id || 0));
+      if (isKaprog && Number.isInteger(kaprogJurusanId) && kaprogJurusanId > 0) {
+        queryKelas = queryKelas.eq('jurusan_id', kaprogJurusanId);
+      }
       else if (isGlobalAccess && filterJurusan !== 'Semua') queryKelas = queryKelas.eq('jurusan_id', parseInt(filterJurusan));
-      const { data: mKelas } = await queryKelas.order('nama_kelas');
+      const { data: mKelas, error: kelasError } = await queryKelas.order('nama_kelas');
+      if (kelasError) throw kelasError;
       setDaftarKelas(mKelas || []);
       const listKelasIds = (mKelas || []).map(k => k.id);
 
       // 2. QUERY SISWA & WALAS
-      const { data: dataSiswa } = await supabase.from('siswa').select('id, nama_siswa, kelas_id, master_kelas(nama_kelas)').eq('status_siswa', 'Aktif');
-      const { data: allWalas } = await supabase.from('walikelas').select('nama_lengkap, kelas_id');
+      const { data: dataSiswa, error: siswaError } = await supabase
+        .from('siswa')
+        .select('id, nama_siswa, kelas_id, master_kelas(nama_kelas)')
+        .eq('status_siswa', 'Aktif');
+      if (siswaError) throw siswaError;
+
+      const { data: allWalas, error: walasError } = await supabase.from('walikelas').select('nama_lengkap, kelas_id');
+      if (walasError) throw walasError;
       const siswaTerfilter = (dataSiswa || []).filter(s => listKelasIds.includes(s.kelas_id));
       const validSiswaIdsSet = new Set(siswaTerfilter.map(s => s.id));
 
@@ -173,24 +191,10 @@ const ExecutiveDashboard = ({ user }) => {
         setWeeklyStats({ topLateSiswa: Object.values(lateMap).sort((a, b) => b.count - a.count), goldenClass: sortedClass[0] });
       }
 
-      const toDate = getTodayDateWIB();
-      const fromDateObj = new Date(`${toDate}T00:00:00+07:00`);
-      fromDateObj.setDate(fromDateObj.getDate() - Math.max(0, Number(mapelRangeDays) - 1));
-      const fromDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Jakarta',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(fromDateObj);
-      const mapelData = await fetchMapelTeacherPerformance({
-        fromDate,
-        toDate,
-        kelasId: filterKelas === 'Semua' ? undefined : Number.parseInt(filterKelas, 10),
-        limit: 400,
-      });
-      setMapelPerformance(mapelData);
-
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Gagal memuat Executive Control', err.message || 'Terjadi kesalahan saat mengambil data.', 'error');
+    } finally { setLoading(false); }
   }, [
     activeTab,
     dariTgl,
@@ -201,10 +205,11 @@ const ExecutiveDashboard = ({ user }) => {
     isGlobalAccess,
     isKaprog,
     modeAkumulasi,
-    mapelRangeDays,
     sampaiTgl,
     tahunIni,
+    user?.id,
     user?.jurusan_id,
+    user?.walikelas_id,
   ]);
 
   useEffect(() => { fetchExecutiveData(); }, [fetchExecutiveData]);
@@ -339,91 +344,6 @@ const ExecutiveDashboard = ({ user }) => {
                  </div>
                </div>
              </div>
-            <div className="rounded-[45px] border border-white/10 bg-white/5 p-8 text-left">
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Teacher Performance Mapel</h3>
-                  <p className="mt-1 text-[8px] font-bold uppercase italic tracking-widest text-gray-500">
-                    Kehadiran guru mapel & rasio keterlambatan
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {[7, 14, 30].map((days) => (
-                    <button
-                      key={days}
-                      onClick={() => setMapelRangeDays(days)}
-                      className={`rounded-xl px-3 py-2 text-[9px] font-black uppercase ${
-                        mapelRangeDays === days
-                          ? 'bg-blue-600 text-white shadow-lg'
-                          : 'border border-white/10 bg-white/5 text-gray-400'
-                      }`}
-                    >
-                      {days} Hari
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-500">Total Sesi</p>
-                  <p className="mt-1 text-2xl font-black text-white">{mapelPerformance.summary.totalSessions}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-500">Total Guru</p>
-                  <p className="mt-1 text-2xl font-black text-white">{mapelPerformance.summary.totalTeachers}</p>
-                </div>
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-emerald-300">Avg Presence</p>
-                  <p className="mt-1 text-2xl font-black text-emerald-200">
-                    {mapelPerformance.summary.averagePresenceRate}%
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-amber-300">Avg Late</p>
-                  <p className="mt-1 text-2xl font-black text-amber-200">{mapelPerformance.summary.averageLateRate}%</p>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-2xl border border-white/10">
-                <table className="min-w-full text-left text-[10px] uppercase">
-                  <thead className="border-b border-white/10 bg-white/5 text-[8px] font-black tracking-widest text-gray-400">
-                    <tr>
-                      <th className="px-3 py-2">Guru</th>
-                      <th className="px-3 py-2">Sesi</th>
-                      <th className="px-3 py-2">Hadir</th>
-                      <th className="px-3 py-2">Tidak Masuk</th>
-                      <th className="px-3 py-2">Pending</th>
-                      <th className="px-3 py-2">Presence</th>
-                      <th className="px-3 py-2">Late Ratio</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[10px] font-bold text-gray-200">
-                    {mapelPerformance.rows.slice(0, 12).map((row) => (
-                      <tr key={row.guru_id} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="px-3 py-2">
-                          <p className="text-white">{row.guru_nama}</p>
-                          <p className="text-[8px] text-gray-500">{row.kelas_terakhir} • {row.mapel_terakhir}</p>
-                        </td>
-                        <td className="px-3 py-2">{row.total_sessions}</td>
-                        <td className="px-3 py-2 text-emerald-300">{row.hadir_sessions}</td>
-                        <td className="px-3 py-2 text-amber-300">{row.tidak_masuk_sessions}</td>
-                        <td className="px-3 py-2 text-gray-400">{row.pending_sessions}</td>
-                        <td className="px-3 py-2 text-emerald-300">{row.presence_rate}%</td>
-                        <td className="px-3 py-2 text-amber-300">{row.late_rate}%</td>
-                      </tr>
-                    ))}
-                    {mapelPerformance.rows.length === 0 && (
-                      <tr>
-                        <td colSpan="7" className="px-3 py-8 text-center text-[10px] font-bold text-gray-500">
-                          Belum ada data performa mapel pada rentang ini.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         )}
 
