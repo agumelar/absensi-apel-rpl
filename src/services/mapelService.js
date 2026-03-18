@@ -1062,6 +1062,10 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
         row.total_sessions > 0 ? Math.round((row.hadir_sessions / row.total_sessions) * 1000) / 10 : 0,
       late_rate:
         row.hadir_sessions > 0 ? Math.round((row.telat_sessions / row.hadir_sessions) * 1000) / 10 : 0,
+      check_out_rate:
+        row.check_in_sessions > 0
+          ? Math.round((row.check_out_sessions / row.check_in_sessions) * 1000) / 10
+          : null,
     }))
     .sort((a, b) => {
       if (b.late_rate !== a.late_rate) return b.late_rate - a.late_rate;

@@ -192,7 +192,7 @@ const TeacherPerformancePage = ({ user }) => {
           )}
           {!loading && (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] text-sm">
+              <table className="w-full min-w-[1180px] text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                   <tr>
                     <th className="px-3 py-3 text-left">Guru</th>
@@ -205,6 +205,7 @@ const TeacherPerformancePage = ({ user }) => {
                     <th className="px-3 py-3 text-right">Pending</th>
                     <th className="px-3 py-3 text-right">Presence</th>
                     <th className="px-3 py-3 text-right">Late Ratio</th>
+                    <th className="px-3 py-3 text-right">Check-out Rate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,14 +223,17 @@ const TeacherPerformancePage = ({ user }) => {
                       <td className="px-3 py-3 text-right font-bold text-slate-600">{row.pending_sessions}</td>
                       <td className="px-3 py-3 text-right font-bold text-green-700">{row.presence_rate}%</td>
                       <td className="px-3 py-3 text-right font-bold text-amber-700">{row.late_rate}%</td>
+                      <td className="px-3 py-3 text-right font-bold text-indigo-700">
+                        {row.check_out_rate === null ? '-' : `${row.check_out_rate}%`}
+                      </td>
                     </tr>
                   ))}
-                    {performance.rows.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="px-3 py-8 text-center text-sm text-gray-500">
-                          Belum ada data teacher performance pada rentang/filter ini.
-                        </td>
-                      </tr>
+                  {performance.rows.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="px-3 py-8 text-center text-sm text-gray-500">
+                        Belum ada data teacher performance pada rentang/filter ini.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
