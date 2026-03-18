@@ -37,12 +37,13 @@ import {
 } from '../shared/constants/routes';
 
 const AppRoutes = ({
-  isExec,
   isPiket,
   isAdmin,
   isWalas,
   canAccessMapel,
   canAccessMapelAudit,
+  canViewExecutiveControl,
+  canViewTeacherPerformance,
   canAccessApelWorkspace,
   hasMultiWorkspace,
   singleWorkspaceRoute,
@@ -57,8 +58,10 @@ const AppRoutes = ({
         element={
           !canAccessApelWorkspace && canAccessMapel ? (
             <Navigate to={MAPEL_DASHBOARD_ROUTE} replace />
-          ) : isExec ? (
+          ) : canViewExecutiveControl ? (
             <ExecutiveDashboard user={userData} />
+          ) : canViewTeacherPerformance ? (
+            <Navigate to={TEACHER_PERFORMANCE_ROUTE} replace />
           ) : (
             <Dashboard user={userData} />
           )
@@ -75,7 +78,7 @@ const AppRoutes = ({
       <Route
         path={TEACHER_PERFORMANCE_ROUTE}
         element={
-          <RequireRole allow={isExec}>
+          <RequireRole allow={canViewTeacherPerformance}>
             <TeacherPerformancePage user={userData} />
           </RequireRole>
         }

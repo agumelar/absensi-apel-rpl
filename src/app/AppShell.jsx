@@ -73,6 +73,10 @@ const AppShell = ({
   const location = useLocation();
   const isAuditRoute = location.pathname === MAPEL_AUDIT_ROUTE;
   const isMapelWorkspace = location.pathname.startsWith('/mapel') && !isAuditRoute;
+  const isKesiswaanRole = userRole === 'kesiswaan';
+  const isKurikulumRole = userRole === 'kurikulum';
+  const showExecutiveControlMenu = isExec && !isKurikulumRole;
+  const showTeacherPerformanceMenu = isExec && !isKesiswaanRole;
 
   const navMapel = [
     { to: MAPEL_SCHEDULE_ROUTE, icon: BookOpen, label: 'Jadwal Mengajar' },
@@ -81,16 +85,22 @@ const AppShell = ({
     { to: MAPEL_HISTORY_ROUTE, icon: History, label: 'Riwayat Sesi' },
   ];
 
+  const dashboardNavItem = isPiket
+    ? { to: '/piket-dashboard', icon: PieChartIcon, label: 'Dashboard Piket' }
+    : isMapelWorkspace && canAccessMapel
+      ? { to: MAPEL_DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard Mapel' }
+      : showExecutiveControlMenu
+        ? { to: DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Executive Control' }
+        : !isExec
+          ? { to: DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard' }
+          : null;
+
   const navMain = [
     ...(hasMultiWorkspace
       ? [{ to: APP_SWITCHER_ROUTE, icon: ArrowLeftRight, label: 'Pilih Workspace' }]
       : []),
-    isPiket
-      ? { to: '/piket-dashboard', icon: PieChartIcon, label: 'Dashboard Piket' }
-      : isMapelWorkspace && canAccessMapel
-        ? { to: MAPEL_DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard Mapel' }
-        : { to: DASHBOARD_ROUTE, icon: LayoutDashboard, label: isExec ? 'Executive Control' : 'Dashboard' },
-    ...(!isMapelWorkspace && isExec
+    ...(dashboardNavItem ? [dashboardNavItem] : []),
+    ...(!isMapelWorkspace && showTeacherPerformanceMenu
       ? [{ to: TEACHER_PERFORMANCE_ROUTE, icon: BarChart3, label: 'Teacher Performance' }]
       : []),
     ...(!isMapelWorkspace && canAccessMapelAudit

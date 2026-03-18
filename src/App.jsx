@@ -20,6 +20,8 @@ const AuthenticatedLayout = ({
   isAdmin,
   canAccessMapel,
   canAccessMapelAudit,
+  canViewExecutiveControl,
+  canViewTeacherPerformance,
   canAccessApelWorkspace,
   hasMultiWorkspace,
   singleWorkspaceRoute,
@@ -37,12 +39,13 @@ const AuthenticatedLayout = ({
 
   const appRoutesElement = (
     <AppRoutes
-      isExec={isExec}
       isPiket={isPiket}
       isAdmin={isAdmin}
       isWalas={isWalas}
       canAccessMapel={canAccessMapel}
       canAccessMapelAudit={canAccessMapelAudit}
+      canViewExecutiveControl={canViewExecutiveControl}
+      canViewTeacherPerformance={canViewTeacherPerformance}
       canAccessApelWorkspace={canAccessApelWorkspace}
       hasMultiWorkspace={hasMultiWorkspace}
       singleWorkspaceRoute={singleWorkspaceRoute}
@@ -108,6 +111,8 @@ const App = () => {
     isWalas,
     canAccessMapel,
     canAccessMapelAudit,
+    canViewExecutiveControl,
+    canViewTeacherPerformance,
     canAccessApelWorkspace,
     hasMultiWorkspace,
     singleWorkspaceRoute,
@@ -140,6 +145,8 @@ const App = () => {
           isAdmin={isAdmin}
           canAccessMapel={canAccessMapel}
           canAccessMapelAudit={canAccessMapelAudit}
+          canViewExecutiveControl={canViewExecutiveControl}
+          canViewTeacherPerformance={canViewTeacherPerformance}
           canAccessApelWorkspace={canAccessApelWorkspace}
           hasMultiWorkspace={hasMultiWorkspace}
           singleWorkspaceRoute={singleWorkspaceRoute}

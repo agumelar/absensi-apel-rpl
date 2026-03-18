@@ -3,6 +3,7 @@ import {
   DASHBOARD_ROUTE,
   MAPEL_DASHBOARD_ROUTE,
   PIKET_DASHBOARD_ROUTE,
+  TEACHER_PERFORMANCE_ROUTE,
 } from '../../shared/constants/routes';
 import {
   isExecutiveRole,
@@ -19,14 +20,20 @@ const useUserRoleFlags = (userData) => {
   const isPiket = userRole === 'piket';
   const isExec = isExecutiveRole(userRole);
   const isWalas = userRole === 'walas' || userRole === 'walikelas';
+  const isKesiswaan = userRole === 'kesiswaan';
+  const isKurikulum = userRole === 'kurikulum';
   const isGuruMapel = normalizeBooleanFlag(userData?.is_guru_mapel);
   const canAccessMapel = isMapelAccessRole(userRole) || isGuruMapel || isGuruRole;
   const canAccessMapelAudit = isMapelAuditRole(userRole);
   const canAccessApelWorkspace = isAdmin || isPiket || isExec || isWalas;
   const hasMultiWorkspace = canAccessApelWorkspace && canAccessMapel;
+  const canViewExecutiveControl = isExec && !isKurikulum;
+  const canViewTeacherPerformance = isExec && !isKesiswaan;
   const singleWorkspaceRoute = isPiket
     ? PIKET_DASHBOARD_ROUTE
-    : canAccessMapel && !canAccessApelWorkspace
+    : isKurikulum
+      ? TEACHER_PERFORMANCE_ROUTE
+      : canAccessMapel && !canAccessApelWorkspace
       ? MAPEL_DASHBOARD_ROUTE
       : DASHBOARD_ROUTE;
   const dashboardLink = hasMultiWorkspace ? APP_SWITCHER_ROUTE : singleWorkspaceRoute;
@@ -40,6 +47,8 @@ const useUserRoleFlags = (userData) => {
     isGuruMapel,
     canAccessMapel,
     canAccessMapelAudit,
+    canViewExecutiveControl,
+    canViewTeacherPerformance,
     canAccessApelWorkspace,
     hasMultiWorkspace,
     singleWorkspaceRoute,
