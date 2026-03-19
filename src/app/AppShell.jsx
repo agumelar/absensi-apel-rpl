@@ -21,6 +21,7 @@ import {
   ArrowLeftRight,
   Sun,
   Moon,
+  FlaskConical,
 } from 'lucide-react';
 import {
   APP_SWITCHER_ROUTE,
@@ -35,6 +36,7 @@ import {
 } from '../shared/constants/routes';
 import Button from '../shared/ui/Button';
 import { cn } from '../shared/ui/cn';
+import { isDemoMode, disableDemoMode } from '../demo/demoMode';
 
 const navBaseClass =
   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200';
@@ -71,6 +73,7 @@ const AppShell = ({
   children,
 }) => {
   const location = useLocation();
+  const isDemo = isDemoMode();
   const isAuditRoute = location.pathname === MAPEL_AUDIT_ROUTE;
   const isMapelWorkspace = location.pathname.startsWith('/mapel') && !isAuditRoute;
   const isKesiswaanRole = userRole === 'kesiswaan';
@@ -257,7 +260,14 @@ const AppShell = ({
             </div>
           </div>
 
-          <Button onClick={handleLogout} variant="danger" className="w-full justify-center">
+          <Button
+            onClick={() => {
+              disableDemoMode();
+              handleLogout();
+            }}
+            variant="danger"
+            className="w-full justify-center"
+          >
             <LogOut size={16} /> Keluar
           </Button>
         </div>
@@ -298,7 +308,18 @@ const AppShell = ({
           </div>
         </header>
 
-        <div className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-8">{children}</div>
+        <div className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-8">
+          {isDemo && (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+              <FlaskConical size={18} className="shrink-0 text-amber-600" />
+              <div className="flex-1 min-w-0">
+                <span className="font-bold text-amber-800">MODE DEMO AKTIF</span>
+                <span className="ml-2 text-amber-700">– Semua data yang ditampilkan adalah fiktif. Perubahan tidak tersimpan ke server.</span>
+              </div>
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );

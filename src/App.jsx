@@ -10,6 +10,7 @@ import usePwaInstallPrompt from './app/hooks/usePwaInstallPrompt';
 import useUserRoleFlags from './app/hooks/useUserRoleFlags';
 import useThemeMode from './app/hooks/useThemeMode';
 import { clearSession, hasValidSession, persistSession, readSession } from './services/auth/sessionService';
+import { disableDemoMode } from './demo/demoMode';
 
 const AuthenticatedLayout = ({
   isSidebarOpen,
@@ -97,6 +98,7 @@ const App = () => {
   };
 
   const handleLogout = () => {
+    disableDemoMode();
     clearSession();
     setIsLoggedIn(false);
     setUserData(null);
