@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Login from './features/auth/pages/LoginPage';
 import PublicMonitoring from './features/monitoring/pages/PublicMonitoringPage';
-import DemoLaunchPage from './features/demo/DemoLaunchPage';
 import AppShell from './app/AppShell';
 import AppRoutes from './routes/AppRoutes';
 import RequireAuth from './routes/guards/RequireAuth';
@@ -136,8 +135,6 @@ const App = () => {
       currentPath={currentPath}
       publicPath={PUBLIC_MONITORING_ROUTE}
       publicElement={publicMonitoringElement}
-      demoBasePath="/demo"
-      demoElement={<DemoLaunchPage onLogin={handleLoginSuccess} />}
       fallbackElement={<Login onLogin={handleLoginSuccess} />}
     >
       <Router>
