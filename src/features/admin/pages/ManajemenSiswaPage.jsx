@@ -18,6 +18,24 @@ const ManajemenSiswa = () => {
   const [selectedKelas, setSelectedKelas] = useState('');
   
   const isDark = document.documentElement.dataset.theme === 'dark';
+  const swalDarkThemeOptions = isDark
+    ? {
+        background: '#0f172a',
+        color: '#e2e8f0',
+        confirmButtonColor: '#2563eb',
+        cancelButtonColor: '#475569',
+        backdrop: 'rgba(2, 6, 23, 0.75)',
+        didOpen: () => {
+          const input = Swal.getInput();
+          if (input) {
+            input.style.backgroundColor = '#1e293b';
+            input.style.color = '#e2e8f0';
+            input.style.border = '1px solid #475569';
+            input.style.borderRadius = '12px';
+          }
+        },
+      }
+    : {};
 
   // Form State
   const [isAddingManual, setIsAddingManual] = useState(false);
@@ -165,7 +183,8 @@ const ManajemenSiswa = () => {
       title: 'Aksi Massal Kelas',
       input: 'select',
       inputOptions: { 'promote': 'Naik Kelas', 'graduate': 'Luluskan (Alumni)' },
-      showCancelButton: true
+      showCancelButton: true,
+      ...swalDarkThemeOptions,
     });
 
     if (action === 'graduate') {
@@ -177,7 +196,8 @@ const ManajemenSiswa = () => {
         title: 'Pilih Kelas Tujuan',
         input: 'select',
         inputOptions: Object.fromEntries(listKelas.map(k => [k.id, k.nama_kelas])),
-        showCancelButton: true
+        showCancelButton: true,
+        ...swalDarkThemeOptions,
       });
       if (newKls) {
         await supabase.from('siswa').update({ kelas_id: newKls }).eq('kelas_id', selectedKelas);
@@ -209,11 +229,30 @@ const ManajemenSiswa = () => {
           </Button>
 
           {selectedKelas && (
-            <Button onClick={handleBulkAction} variant="secondary" className="text-[10px] uppercase">
+            <Button
+              onClick={handleBulkAction}
+              variant="secondary"
+              className={`text-[10px] uppercase ${
+                isDark
+                  ? 'bg-slate-700 text-slate-100 border-slate-600 hover:bg-slate-600 shadow-md shadow-slate-950/30'
+                  : ''
+              }`}
+            >
               <ArrowUpCircle size={16} /> Aksi Massal
             </Button>
           )}
-          <Button onClick={() => { setFormData({id:null, nis:'', nama_siswa:'', kelas_id:'', status_siswa:'Aktif'}); setIsAddingManual(true); }} variant="ghost" className="border-slate-300 text-[10px] uppercase">
+          <Button
+            onClick={() => {
+              setFormData({ id: null, nis: '', nama_siswa: '', kelas_id: '', status_siswa: 'Aktif' });
+              setIsAddingManual(true);
+            }}
+            variant={isDark ? 'secondary' : 'ghost'}
+            className={`text-[10px] uppercase ${
+              isDark
+                ? 'bg-slate-700 text-slate-100 border-slate-600 hover:bg-slate-600 shadow-md shadow-slate-950/30'
+                : 'border-slate-300'
+            }`}
+          >
             <UserPlus size={16} /> Manual
           </Button>
           <label className="bg-blue-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase shadow-lg shadow-blue-200 cursor-pointer">
