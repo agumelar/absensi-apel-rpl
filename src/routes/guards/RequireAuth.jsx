@@ -6,6 +6,8 @@ const RequireAuth = ({
   currentPath,
   publicPath,
   publicElement,
+  demoBasePath,
+  demoElement,
   fallbackElement,
   children,
 }) => {
@@ -13,6 +15,11 @@ const RequireAuth = ({
 
   if (!sessionReady && currentPath === publicPath) {
     return publicElement;
+  }
+
+  // Izinkan path /demo dan /demo/:role tanpa harus login terlebih dahulu
+  if (!sessionReady && demoBasePath && currentPath.startsWith(demoBasePath)) {
+    return demoElement;
   }
 
   if (!sessionReady) {

@@ -43,7 +43,7 @@ class MockQueryBuilder {
 
   // ---- SELECT ----
   // eslint-disable-next-line no-unused-vars
-  select(_fields = '*', opts = {}) {
+  select(fields = '*', opts = {}) {
     if (opts && opts.count === 'exact') this._isCount = true;
     if (opts && opts.head === true) this._isHeadOnly = true;
     return this;
@@ -166,10 +166,17 @@ class MockQueryBuilder {
       rows = rows.filter((row) => {
         const rowVal = getPath(row, f.col);
         switch (f.type) {
-          case 'eq':
-            return String(rowVal) === String(f.val); // compare as strings for number/string compat
-          case 'neq':
+          case 'eq': {
+            // Handle null explicitly to avoid String(null) === "null"
+            if (f.val === null || f.val === undefined) return rowVal === null || rowVal === undefined;
+            if (rowVal === null || rowVal === undefined) return false;
+            return String(rowVal) === String(f.val);
+          }
+          case 'neq': {
+            if (f.val === null || f.val === undefined) return rowVal !== null && rowVal !== undefined;
+            if (rowVal === null || rowVal === undefined) return true;
             return String(rowVal) !== String(f.val);
+          }
           case 'gt':
             return rowVal > f.val;
           case 'gte':
