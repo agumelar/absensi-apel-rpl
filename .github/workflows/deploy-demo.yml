@@ -1,0 +1,38 @@
+name: Deploy Demo Absensi (Domain Terpisah)
+on:
+  push:
+    branches:
+      - copilot/create-demo-for-application
+
+jobs:
+  web-deploy-demo:
+    name: Build dan Deploy Demo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil Kode Terbaru
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Project (Mode Demo)
+        run: npm run build
+        env:
+          VITE_DEMO_MODE: 'true'
+
+      - name: Kirim File ke Hosting Demo via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftp
+          local-dir: ./dist/
+          server-dir: ${{ secrets.FTP_DEMO_DIR }}
+          state-name: .ftp-deploy-sync-state-demo.json
