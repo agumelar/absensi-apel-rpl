@@ -181,9 +181,10 @@ const Login = ({ onLogin }) => {
                     href="https://www.instagram.com/gumelar16"
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label="Hubungi developer di Instagram @gumelar16"
                     className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold text-pink-600 transition hover:bg-pink-50"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Instagram icon">
                       <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
                     </svg>
                     @gumelar16
@@ -192,9 +193,10 @@ const Login = ({ onLogin }) => {
                     href="https://www.threads.net/@gumelar16"
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label="Hubungi developer di Threads @gumelar16"
                     className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-100"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 192 192" fill="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 192 192" fill="currentColor" role="img" aria-label="Threads icon">
                       <path d="M141.537 88.988a66.667 66.667 0 0 0-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.23c8.248.054 14.474 2.452 18.502 7.13 2.931 3.405 4.893 8.11 5.864 14.05-7.314-1.243-15.224-1.626-23.68-1.14-23.82 1.371-39.134 15.264-38.105 34.568.522 9.792 5.4 18.216 13.735 23.719 7.047 4.652 16.124 6.927 25.557 6.412 12.458-.683 22.231-5.436 29.05-14.127 5.177-6.6 8.452-15.153 9.898-25.93 5.937 3.583 10.337 8.298 12.767 13.966 4.132 9.635 4.373 25.468-8.546 38.376-11.319 11.308-24.925 16.2-45.488 16.351-22.809-.169-40.06-7.484-51.275-21.742C35.236 139.966 29.808 120.682 29.605 96c.203-24.682 5.63-43.966 16.133-57.317C56.954 24.425 74.206 17.11 97.015 16.94c22.975.17 40.526 7.52 52.171 21.847 5.71 7.026 10.015 15.86 12.853 26.162l16.147-4.308c-3.44-12.68-8.853-23.606-16.219-32.668C147.036 9.607 125.202.195 97.109 0h-.195C68.912.195 47.322 9.67 32.815 28.133 19.448 44.832 12.508 68.667 12.295 96v.512c.213 27.305 7.153 51.092 20.52 67.757C47.322 182.33 68.912 191.805 96.914 192h.195c24.922-.189 42.554-6.703 57.048-21.188 18.963-18.945 18.392-42.692 12.142-57.27-4.484-10.454-13.033-18.945-24.762-24.554Z"/>
                     </svg>
                     @gumelar16

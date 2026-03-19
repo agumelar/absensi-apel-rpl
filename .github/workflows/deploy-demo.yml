@@ -8,6 +8,8 @@ jobs:
   web-deploy-demo:
     name: Build dan Deploy Demo
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Ambil Kode Terbaru
         uses: actions/checkout@v3
