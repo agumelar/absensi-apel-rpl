@@ -1,0 +1,12 @@
+# Redirect semua request ke index.html agar React Router bisa handle routing (SPA)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Jangan redirect kalau file/folder nyata ada di server
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Semua URL lain diarahkan ke index.html
+  RewriteRule ^ index.html [L]
+</IfModule>

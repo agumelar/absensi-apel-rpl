@@ -1,0 +1,58 @@
+name: Deploy Demo Absensi (Domain Terpisah)
+# ============================================================
+# PANDUAN SETUP DOMAIN BARU DI SHARED HOSTING (cPanel):
+#
+# 1. Login cPanel → Addon Domains → tambah domain baru
+#    misal: demo.namadomain.com
+#    Document Root akan otomatis jadi: public_html/demo.namadomain.com
+#
+# 2. Di GitHub → Settings → Secrets → Actions, pastikan ada:
+#    - FTP_SERVER   : IP/hostname FTP (sama seperti app utama)
+#    - FTP_USERNAME : username cPanel (sama seperti app utama)
+#    - FTP_PASSWORD : password cPanel (sama seperti app utama)
+#
+# 3. Ubah nilai server-dir di bawah sesuai Document Root domain demo:
+#    Contoh: ./public_html/demo.namadomain.com/
+# ============================================================
+on:
+  push:
+    branches:
+      - copilot/create-demo-for-application
+
+jobs:
+  web-deploy-demo:
+    name: Build dan Deploy Demo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Ambil Kode Terbaru
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Project (Mode Demo)
+        run: npm run build
+        env:
+          VITE_DEMO_MODE: 'true'
+
+      - name: Kirim File ke Hosting Demo via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftp
+          local-dir: ./dist/
+          # ⬇️ GANTI sesuai folder domain demo di hosting kamu
+          # Contoh: ./public_html/demo.smkn1rongga.sch.id/
+          server-dir: ${{ secrets.FTP_DEMO_DIR }}
+          state-name: .ftp-deploy-sync-state-demo.json
+
