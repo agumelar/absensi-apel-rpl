@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 const DAY_OPTIONS = [
+  { value: 'Minggu', label: 'Minggu' },
   { value: 'Senin', label: 'Senin' },
   { value: 'Selasa', label: 'Selasa' },
   { value: 'Rabu', label: 'Rabu' },

@@ -8,7 +8,7 @@ import {
   MAPEL_SESSION_ROUTE,
 } from '../../../shared/constants/routes';
 import { isMapelAuditRole, normalizeRole } from '../../../shared/constants/roles';
-import { fetchSchedulesByGuru, fetchSessionsByTanggal } from '../../../services/mapelService';
+import { fetchSchedulesByGuruToday, fetchSessionsByTanggal } from '../../../services/mapelService';
 import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
@@ -24,7 +24,7 @@ const MapelHomePage = ({ user }) => {
   useEffect(() => {
     const loadSummary = async () => {
       if (!user?.id) return;
-      const [schedules, sessions] = await Promise.all([fetchSchedulesByGuru(user.id), fetchSessionsByTanggal(today)]);
+      const [schedules, sessions] = await Promise.all([fetchSchedulesByGuruToday(user.id, today), fetchSessionsByTanggal(today)]);
       const hadir = sessions.filter((item) => String(item.status || '').toLowerCase() === 'hadir').length;
       const tidakMasuk = sessions.filter((item) => {
         const status = String(item.status || '').toLowerCase();

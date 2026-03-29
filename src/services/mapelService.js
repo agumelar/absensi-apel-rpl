@@ -247,6 +247,23 @@ export const fetchSchedulesByGuru = async (guruId) => {
   return data || [];
 };
 
+export const fetchSchedulesByGuruToday = async (guruId, tanggal = getTodayDateWIB()) => {
+  assertRequired('guruId', guruId);
+  assertGuruOwnershipOrThrow(guruId);
+  assertRequired('tanggal', tanggal);
+
+  const targetDay = getDayNameWIB(tanggal);
+  const { data, error } = await supabase
+    .from('schedule')
+    .select('*, master_kelas(nama_kelas), master_mapel(nama_mapel, kode_mapel)')
+    .eq('guru_id', guruId)
+    .eq('hari', targetDay)
+    .order('jam_mulai', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
 export const createSchedule = async ({ guruId, kelasId, mapelId, hari, jamMulai, jamSelesai }) => {
   assertRequired('guruId', guruId);
   assertGuruOwnershipOrThrow(guruId);
@@ -378,15 +395,21 @@ export const createSession = async ({ scheduleId, tanggal }) => {
   assertMapelAccessOrThrow();
   const { data: scheduleData, error: scheduleError } = await supabase
     .from('schedule')
-    .select('guru_id')
+    .select('guru_id, hari')
     .eq('id', scheduleId)
     .single();
   if (scheduleError) throw scheduleError;
   assertGuruOwnershipOrThrow(scheduleData.guru_id);
+  const targetDate = tanggal ?? getTodayDateWIB();
+  const expectedDay = getDayNameWIB(targetDate);
+  const scheduleDay = String(scheduleData?.hari ?? '').trim().toLowerCase();
+  if (!scheduleDay || scheduleDay !== String(expectedDay).trim().toLowerCase()) {
+    throw new Error('Jadwal ini tidak aktif untuk hari ini. Pilih jadwal sesuai hari berjalan.');
+  }
 
   const payload = {
     schedule_id: scheduleId,
-    tanggal: tanggal ?? getTodayDateWIB(),
+    tanggal: targetDate,
     status: SESSION_STATUS.PENDING,
   };
 
@@ -641,12 +664,10 @@ export const fetchDailyScoreBySession = async (sessionId) => {
 export const createTeacherAbsenceTask = async ({ sessionId, filePath, instruksi }) => {
   assertRequired('sessionId', sessionId);
   assertRequired('instruksi', instruksi);
-  const session = getSessionOrThrow();
   await assertSessionOwnershipOrThrow(sessionId);
 
   const payload = {
     session_id: sessionId,
-    teacher_id: session.walikelas_id,
     file_path: filePath ?? null,
     instruksi,
   };

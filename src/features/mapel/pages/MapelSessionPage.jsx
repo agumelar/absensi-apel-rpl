@@ -8,7 +8,7 @@ import {
   createTeacherAbsenceTask,
   createSession,
   fetchClassAgendaBySession,
-  fetchSchedulesByGuru,
+  fetchSchedulesByGuruToday,
   fetchStudentAttendanceBySession,
   fetchTeacherAbsenceTaskBySession,
   fetchSessionsByTanggal,
@@ -74,10 +74,19 @@ const MapelSessionPage = ({ user }) => {
 
   const loadData = useCallback(async () => {
     if (!guruId) return;
-    const [scheduleData, sessionData] = await Promise.all([fetchSchedulesByGuru(guruId), fetchSessionsByTanggal(today)]);
+    const [scheduleData, sessionData] = await Promise.all([fetchSchedulesByGuruToday(guruId, today), fetchSessionsByTanggal(today)]);
     setSchedules(scheduleData);
     setTodaySessions(sessionData);
-    if (!selectedScheduleId && scheduleData.length > 0) {
+    if (scheduleData.length === 0) {
+      setSelectedScheduleId('');
+      return;
+    }
+    if (!selectedScheduleId) {
+      setSelectedScheduleId(String(scheduleData[0].id));
+      return;
+    }
+    const stillExists = scheduleData.some((item) => String(item.id) === String(selectedScheduleId));
+    if (!stillExists) {
       setSelectedScheduleId(String(scheduleData[0].id));
     }
   }, [guruId, selectedScheduleId, today]);
@@ -88,6 +97,7 @@ const MapelSessionPage = ({ user }) => {
 
   const selectedSchedule = schedules.find((item) => String(item.id) === String(selectedScheduleId));
   const currentSession = todaySessions.find((item) => String(item.schedule_id) === String(selectedScheduleId));
+  const hasTodaySchedule = schedules.length > 0;
   const attendanceDraftStorageKey = buildAttendanceDraftKey({
     userId: user?.id,
     sessionId: currentSession?.id,
@@ -672,6 +682,18 @@ const MapelSessionPage = ({ user }) => {
         <PageSubtitle className="mt-2 normal-case tracking-wide text-slate-500">Pilih jadwal aktif, lalu lakukan check-in dan check-out berbasis foto.</PageSubtitle>
       </PageHeader>
 
+      {!hasTodaySchedule && (
+        <Card className="rounded-3xl">
+          <CardContent className="p-6 md:p-8">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+              Anda tidak punya jadwal hari ini, silahkan ambil aktifitas untuk meningkatkan pelayanan terhadap siswa.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasTodaySchedule && (
+        <>
       <Card className="rounded-3xl">
         <CardContent className="space-y-4 p-5 md:p-6">
         <label className="text-sm font-bold text-gray-600 block">
@@ -942,6 +964,8 @@ const MapelSessionPage = ({ user }) => {
         )}
         </CardContent>
       </Card>
+        </>
+      )}
     </PageContainer>
   );
 };
