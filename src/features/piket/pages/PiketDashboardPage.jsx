@@ -199,12 +199,7 @@ const PiketDashboard = () => {
       const result = await markTeacherAbsenceTaskDelivered(taskId);
       await fetchPiketData();
       if (result?.audit_warning) {
-        await Swal.fire(
-          'Berhasil (dengan catatan)',
-          `Status distribusi tugas pengganti diperbarui. ${result.audit_warning}`,
-          'warning',
-        );
-        return;
+        console.warn('Mapel audit warning (non-blocking):', result.audit_warning);
       }
 
       await Swal.fire('Berhasil', 'Status distribusi tugas pengganti diperbarui.', 'success');
