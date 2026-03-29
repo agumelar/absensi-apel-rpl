@@ -65,6 +65,8 @@ const AppShell = ({
   hasMultiWorkspace,
   deferredPrompt,
   handleInstallClick,
+  isIos,
+  isStandalone,
   userData,
   userRole,
   isDark,
@@ -244,10 +246,15 @@ const AppShell = ({
         </nav>
 
         <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
-          {deferredPrompt && (
-            <Button onClick={handleInstallClick} className="w-full justify-center">
+          {(deferredPrompt || (isIos && !isStandalone)) && (
+            <Button onClick={handleInstallClick} className="w-full justify-center" disabled={!deferredPrompt}>
               <DownloadCloud size={16} /> Install Aplikasi
             </Button>
+          )}
+          {isIos && !isStandalone && !deferredPrompt && (
+            <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+              iPhone/iPad: buka menu Share Safari lalu pilih <strong>Add to Home Screen</strong>.
+            </p>
           )}
 
           <div className="premium-card flex items-center gap-3 rounded-xl px-3 py-2.5">

@@ -31,6 +31,8 @@ const AuthenticatedLayout = ({
   dashboardLink,
   deferredPrompt,
   handleInstallClick,
+  isIos,
+  isStandalone,
   isDark,
   toggleTheme,
   handleLogout,
@@ -72,6 +74,8 @@ const AuthenticatedLayout = ({
       hasMultiWorkspace={hasMultiWorkspace}
       deferredPrompt={deferredPrompt}
       handleInstallClick={handleInstallClick}
+      isIos={isIos}
+      isStandalone={isStandalone}
       userData={userData}
       userRole={userRole}
       isDark={isDark}
@@ -87,7 +91,7 @@ const App = () => {
   const [userData, setUserData] = useState(() => readSession());
   const [isLoggedIn, setIsLoggedIn] = useState(() => hasValidSession());
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const { deferredPrompt, handleInstallClick } = usePwaInstallPrompt();
+  const { deferredPrompt, handleInstallClick, isIos, isStandalone } = usePwaInstallPrompt();
   const { isDark, toggleTheme } = useThemeMode();
 
   const handleLoginSuccess = (data) => {
@@ -155,6 +159,8 @@ const App = () => {
           dashboardLink={dashboardLink}
           deferredPrompt={deferredPrompt}
           handleInstallClick={handleInstallClick}
+          isIos={isIos}
+          isStandalone={isStandalone}
           userData={userData}
           userRole={userRole}
           isDark={isDark}

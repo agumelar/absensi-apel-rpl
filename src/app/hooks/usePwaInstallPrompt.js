@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
 
+const detectIos = () => {
+  if (typeof window === 'undefined') return false;
+  const ua = String(window.navigator.userAgent || '').toLowerCase();
+  return /iphone|ipad|ipod/.test(ua);
+};
+
+const detectStandalone = () => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+};
+
 const usePwaInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isIos] = useState(() => detectIos());
+  const [isStandalone, setIsStandalone] = useState(() => detectStandalone());
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event) => {
@@ -11,6 +24,7 @@ const usePwaInstallPrompt = () => {
 
     const handleAppInstalled = () => {
       setDeferredPrompt(null);
+      setIsStandalone(true);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -32,7 +46,7 @@ const usePwaInstallPrompt = () => {
     }
   };
 
-  return { deferredPrompt, handleInstallClick };
+  return { deferredPrompt, handleInstallClick, isIos, isStandalone };
 };
 
 export default usePwaInstallPrompt;
