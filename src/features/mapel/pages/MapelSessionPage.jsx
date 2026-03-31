@@ -136,6 +136,12 @@ const MapelSessionPage = ({ user }) => {
     I: 'bg-amber-500 text-white',
     A: 'bg-rose-600 text-white',
   };
+  const stepStatus = {
+    jadwal: Boolean(selectedScheduleId),
+    agenda: agendaSubmitted,
+    absensi: attendanceSummary.filled > 0,
+    selesai: Boolean(currentSession?.waktu_check_out),
+  };
 
   const refreshSyncSummary = useCallback(() => {
     try {
@@ -694,156 +700,156 @@ const MapelSessionPage = ({ user }) => {
 
       {hasTodaySchedule && (
         <>
-      <Card className="rounded-3xl">
-        <CardContent className="space-y-4 p-5 md:p-6">
-        <label className="text-sm font-bold text-gray-600 block">
-          Jadwal Hari Ini
-          <select
-            className="w-full mt-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 font-semibold"
-            value={selectedScheduleId}
-            onChange={(e) => setSelectedScheduleId(e.target.value)}
-          >
-            <option value="">Pilih jadwal</option>
-            {schedules.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.hari} • {String(item.jam_mulai).slice(0, 5)}-{String(item.jam_selesai).slice(0, 5)} •{' '}
-                {item.master_kelas?.nama_kelas ?? '-'} • {item.master_mapel?.nama_mapel ?? '-'}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Card className="rounded-3xl">
+            <CardContent className="space-y-4 p-5 md:p-6">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Progress Langkah KBM</p>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <div className={`rounded-xl border px-3 py-2 ${stepStatus.jadwal ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className="text-[11px] font-semibold text-slate-500">Langkah 1</p>
+                  <p className="text-sm font-bold text-slate-800">Pilih Jadwal</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 ${stepStatus.agenda ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className="text-[11px] font-semibold text-slate-500">Langkah 2</p>
+                  <p className="text-sm font-bold text-slate-800">Submit Agenda</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 ${stepStatus.absensi ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className="text-[11px] font-semibold text-slate-500">Langkah 3</p>
+                  <p className="text-sm font-bold text-slate-800">Isi Absensi</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 ${stepStatus.selesai ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className="text-[11px] font-semibold text-slate-500">Langkah 4</p>
+                  <p className="text-sm font-bold text-slate-800">Check-Out</p>
+                </div>
+              </div>
 
-        <div className="text-sm text-gray-600 bg-blue-50 rounded-xl p-3">
-          Status sesi: <span className="font-black text-blue-700">{currentSession?.status ?? 'Belum dibuat'}</span>
-          {selectedSchedule && (
-            <div className="mt-1 text-xs text-gray-500">
-              Jadwal: {selectedSchedule.hari}, {String(selectedSchedule.jam_mulai).slice(0, 5)}-
-              {String(selectedSchedule.jam_selesai).slice(0, 5)}
-            </div>
-          )}
-        </div>
-
-        {lastCompressionMeta && (
-          <div className="text-xs text-gray-500">
-            Kompresi terakhir: {(lastCompressionMeta.originalSizeBytes / 1024).toFixed(1)}KB →{' '}
-            {(lastCompressionMeta.compressedSizeBytes / 1024).toFixed(1)}KB
-          </div>
-        )}
-
-        <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-3">
-          <p className="text-xs font-black uppercase tracking-wide text-gray-700">Agenda Wajib Sebelum QR</p>
-          <input
-            type="text"
-            value={agendaDraft.topik}
-            onChange={(e) => setAgendaDraft((prev) => ({ ...prev, topik: e.target.value }))}
-            placeholder="Topik pembelajaran"
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold"
-          />
-          <input
-            type="text"
-            value={agendaDraft.metode}
-            onChange={(e) => setAgendaDraft((prev) => ({ ...prev, metode: e.target.value }))}
-            placeholder="Metode (opsional)"
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold"
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={handleSubmitAgenda}
-              disabled={loading || !selectedScheduleId}
-              variant="secondary"
-              size="sm"
-              className="uppercase tracking-wide"
-            >
-              Submit Agenda
-            </Button>
-            <span className={`text-xs font-bold ${agendaSubmitted ? 'text-green-600' : 'text-amber-600'}`}>
-              {agendaSubmitted ? 'Agenda sudah tersubmit' : 'Agenda belum tersubmit'}
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 space-y-3">
-          <p className="text-xs font-black uppercase tracking-wide text-rose-700">Mode Guru Tidak Masuk + Tugas Pengganti</p>
-          <textarea
-            value={absenceInstruksi}
-            onChange={(e) => setAbsenceInstruksi(e.target.value)}
-            rows={3}
-            placeholder="Tulis instruksi tugas pengganti untuk siswa..."
-            className="w-full bg-white border border-rose-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700"
-          />
-          <input
-            type="file"
-            onChange={(e) => setAbsenceFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-semibold"
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={handleSubmitGuruTidakMasuk}
-              disabled={savingAbsenceTask || !selectedScheduleId || !absenceInstruksi.trim() || !!absenceTask?.id}
-              size="sm"
-              className="bg-rose-600 border-rose-600 hover:bg-rose-700 uppercase tracking-wide"
-            >
-              {savingAbsenceTask ? 'Menyimpan...' : 'Simpan Tidak Masuk'}
-            </Button>
-            {absenceTask?.id && <span className="text-xs font-bold text-rose-700">Tugas pengganti sudah tersimpan.</span>}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => handlePhotoAction('check_in')}
-            disabled={loading || !selectedScheduleId}
-            size="sm"
-            className="bg-green-600 border-green-600 hover:bg-green-700 uppercase tracking-wide"
-          >
-            Check-In Foto
-          </Button>
-          <Button
-            onClick={() => handlePhotoAction('check_out')}
-            disabled={loading || !selectedScheduleId || !currentSession}
-            size="sm"
-            className="bg-orange-500 border-orange-500 hover:bg-orange-600 uppercase tracking-wide"
-          >
-            Check-Out Foto
-          </Button>
-          <Button
-            onClick={handleOpenQrScanner}
-            disabled={!agendaSubmitted || !currentSession}
-            variant="ghost"
-            size="sm"
-            className="border-slate-300 uppercase tracking-wide"
-          >
-            {qrScannerOpen ? 'Tutup Scanner QR' : 'Buka Scanner QR'}
-          </Button>
-        </div>
-
-        {qrScannerOpen && (
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-700">Scanner QR (Opsional)</p>
-            <div className="flex flex-wrap gap-2">
-              {['H', 'S', 'I', 'A'].map((statusCode) => (
-                <button
-                  key={`qr-status-${statusCode}`}
-                  onClick={() => setQrStatusCode(statusCode)}
-                  className={`px-3 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide ${
-                    qrStatusCode === statusCode ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-700'
-                  }`}
+              <label className="text-sm font-bold text-gray-600 block">
+                Langkah 1 · Jadwal Hari Ini
+                <select
+                  className="w-full mt-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 font-semibold"
+                  value={selectedScheduleId}
+                  onChange={(e) => setSelectedScheduleId(e.target.value)}
                 >
-                  Mode {statusCode}
-                </button>
-              ))}
-            </div>
-            <div id={QR_READER_ELEMENT_ID} className="w-full max-w-sm rounded-lg overflow-hidden border border-slate-200 bg-black/5" />
-            {qrLastResult && <p className="text-xs text-slate-600">{qrLastResult}</p>}
-          </div>
-        )}
-        </CardContent>
-      </Card>
+                  <option value="">Pilih jadwal</option>
+                  {schedules.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.hari} • {String(item.jam_mulai).slice(0, 5)}-{String(item.jam_selesai).slice(0, 5)} •{' '}
+                      {item.master_kelas?.nama_kelas ?? '-'} • {item.master_mapel?.nama_mapel ?? '-'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="text-sm text-gray-600 bg-blue-50 rounded-xl p-3">
+                Status sesi: <span className="font-black text-blue-700">{currentSession?.status ?? 'Belum dibuat'}</span>
+                {selectedSchedule && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    Jadwal: {selectedSchedule.hari}, {String(selectedSchedule.jam_mulai).slice(0, 5)}-
+                    {String(selectedSchedule.jam_selesai).slice(0, 5)}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl">
+            <CardContent className="space-y-3 p-5 md:p-6">
+              <p className="text-sm font-bold text-gray-700">Langkah 2 · Agenda Wajib</p>
+              <input
+                type="text"
+                value={agendaDraft.topik}
+                onChange={(e) => setAgendaDraft((prev) => ({ ...prev, topik: e.target.value }))}
+                placeholder="Topik pembelajaran"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold"
+              />
+              <input
+                type="text"
+                value={agendaDraft.metode}
+                onChange={(e) => setAgendaDraft((prev) => ({ ...prev, metode: e.target.value }))}
+                placeholder="Metode (opsional)"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={handleSubmitAgenda}
+                  disabled={loading || !selectedScheduleId}
+                  variant="secondary"
+                  size="sm"
+                  className="uppercase tracking-wide"
+                >
+                  Submit Agenda
+                </Button>
+                <span className={`text-xs font-bold ${agendaSubmitted ? 'text-green-600' : 'text-amber-600'}`}>
+                  {agendaSubmitted ? 'Agenda sudah tersubmit' : 'Agenda belum tersubmit'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl">
+            <CardContent className="space-y-3 p-5 md:p-6">
+              <p className="text-sm font-bold text-gray-700">Langkah 3 & 4 · Operasional Sesi</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => handlePhotoAction('check_in')}
+                  disabled={loading || !selectedScheduleId}
+                  size="sm"
+                  className="bg-green-600 border-green-600 hover:bg-green-700 uppercase tracking-wide"
+                >
+                  Check-In Foto
+                </Button>
+                <Button
+                  onClick={() => handlePhotoAction('check_out')}
+                  disabled={loading || !selectedScheduleId || !currentSession}
+                  size="sm"
+                  className="bg-orange-500 border-orange-500 hover:bg-orange-600 uppercase tracking-wide"
+                >
+                  Check-Out Foto
+                </Button>
+                <Button
+                  onClick={handleOpenQrScanner}
+                  disabled={!agendaSubmitted || !currentSession}
+                  variant="ghost"
+                  size="sm"
+                  className="border-slate-300 uppercase tracking-wide"
+                >
+                  {qrScannerOpen ? 'Tutup Scanner QR' : 'Buka Scanner QR'}
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">QR tetap opsional. Flow utama tetap isi absensi manual di kartu berikutnya.</p>
+              {lastCompressionMeta && (
+                <p className="text-xs text-gray-500">
+                  Kompresi terakhir: {(lastCompressionMeta.originalSizeBytes / 1024).toFixed(1)}KB →{' '}
+                  {(lastCompressionMeta.compressedSizeBytes / 1024).toFixed(1)}KB
+                </p>
+              )}
+
+              {qrScannerOpen && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-700">Scanner QR (Opsional)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['H', 'S', 'I', 'A'].map((statusCode) => (
+                      <button
+                        key={`qr-status-${statusCode}`}
+                        onClick={() => setQrStatusCode(statusCode)}
+                        className={`px-3 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide ${
+                          qrStatusCode === statusCode ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-700'
+                        }`}
+                      >
+                        Mode {statusCode}
+                      </button>
+                    ))}
+                  </div>
+                  <div id={QR_READER_ELEMENT_ID} className="w-full max-w-sm rounded-lg overflow-hidden border border-slate-200 bg-black/5" />
+                  {qrLastResult && <p className="text-xs text-slate-600">{qrLastResult}</p>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
       <Card className="rounded-3xl">
         <CardContent className="space-y-4 p-5 md:p-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-black text-gray-900">Absensi Manual (Utama)</h2>
+          <h2 className="text-lg font-black text-gray-900">Langkah 3 · Absensi Manual (Utama)</h2>
           <Button
             onClick={handleSaveManualAttendance}
             disabled={savingAttendance || !agendaSubmitted || !currentSession}
@@ -964,6 +970,37 @@ const MapelSessionPage = ({ user }) => {
         )}
         </CardContent>
       </Card>
+
+          <details className="rounded-3xl border border-rose-200 bg-rose-50 p-4">
+            <summary className="cursor-pointer list-none text-sm font-black text-rose-700">
+              Mode Guru Tidak Masuk + Tugas Pengganti (opsional)
+            </summary>
+            <div className="mt-3 space-y-3">
+              <textarea
+                value={absenceInstruksi}
+                onChange={(e) => setAbsenceInstruksi(e.target.value)}
+                rows={3}
+                placeholder="Tulis instruksi tugas pengganti untuk siswa..."
+                className="w-full bg-white border border-rose-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700"
+              />
+              <input
+                type="file"
+                onChange={(e) => setAbsenceFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-semibold"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={handleSubmitGuruTidakMasuk}
+                  disabled={savingAbsenceTask || !selectedScheduleId || !absenceInstruksi.trim() || !!absenceTask?.id}
+                  size="sm"
+                  className="bg-rose-600 border-rose-600 hover:bg-rose-700 uppercase tracking-wide"
+                >
+                  {savingAbsenceTask ? 'Menyimpan...' : 'Simpan Tidak Masuk'}
+                </Button>
+                {absenceTask?.id && <span className="text-xs font-bold text-rose-700">Tugas pengganti sudah tersimpan.</span>}
+              </div>
+            </div>
+          </details>
         </>
       )}
     </PageContainer>
