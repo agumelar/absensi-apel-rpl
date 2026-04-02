@@ -38,6 +38,84 @@ export const exportJsonToExcel = async ({ rows, sheetName, fileName }) => {
   URL.revokeObjectURL(url);
 };
 
+export const exportMapelRecapToExcel = async ({
+  meta = {},
+  rows = [],
+  sheetName = 'Rekap Kehadiran KBM',
+  fileName = 'rekap-kbm.xlsx',
+} = {}) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  worksheet.columns = [
+    { key: 'no', width: 6 },
+    { key: 'nama', width: 32 },
+    { key: 'nis', width: 16 },
+    { key: 'total', width: 16 },
+    { key: 'h', width: 8 },
+    { key: 's', width: 8 },
+    { key: 'i', width: 8 },
+    { key: 'a', width: 8 },
+    { key: 'persen', width: 14 },
+    { key: 'keterangan', width: 24 },
+  ];
+
+  const metadataRows = [
+    ['Mapel', String(meta.mapelLabel || '-')],
+    ['Kelas', String(meta.kelasLabel || '-')],
+    ['Periode', String(meta.periodeLabel || '-')],
+    ['Finalitas', String(meta.finalityLabel || 'Belum Final')],
+  ];
+
+  metadataRows.forEach(([label, value]) => {
+    const row = worksheet.addRow(['', label, value]);
+    row.getCell(2).font = { bold: true };
+  });
+
+  worksheet.addRow([]);
+
+  const headerRow = worksheet.addRow([
+    'No',
+    'Nama',
+    'NIS',
+    'Total Pertemuan',
+    'H',
+    'S',
+    'I',
+    'A',
+    '% Kehadiran',
+    'Keterangan',
+  ]);
+  headerRow.font = { bold: true };
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+  safeRows.forEach((item) => {
+    worksheet.addRow([
+      item.No ?? '',
+      item.Nama ?? '-',
+      item.NIS ?? '-',
+      item['Total Pertemuan'] ?? 0,
+      item.H ?? 0,
+      item.S ?? 0,
+      item.I ?? 0,
+      item.A ?? 0,
+      item['% Kehadiran'] ?? 0,
+      item.Keterangan ?? '-',
+    ]);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const readExcelFileToJson = async (file) => {
   if (!file) return [];
 

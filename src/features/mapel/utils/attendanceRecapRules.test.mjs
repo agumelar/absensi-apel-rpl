@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildRecapExcelDataRows,
   buildRecapRequestPeriod,
   buildRecapExcelTableRows,
   buildPeriodRange,
@@ -168,4 +169,53 @@ test('formatRecapPeriodLabel prints human readable date range', () => {
   });
 
   assert.equal(label, 'Bulanan: 2026-04-01 s/d 2026-04-20');
+});
+
+test('buildRecapExcelDataRows returns complete table rows with keterangan', () => {
+  const rows = buildRecapExcelDataRows([
+    {
+      nama_siswa: 'Budi',
+      nis: '001',
+      total_pertemuan: 4,
+      hadir: 3,
+      sakit: 1,
+      izin: 0,
+      alpha: 0,
+      belum_diisi: 0,
+      persentase_kehadiran: 75,
+    },
+    {
+      nama_siswa: 'Ani',
+      nis: '002',
+      total_pertemuan: 4,
+      hadir: 2,
+      sakit: 0,
+      izin: 1,
+      alpha: 0,
+      belum_diisi: 1,
+      persentase_kehadiran: 50,
+    },
+  ]);
+
+  assert.equal(rows[0].No, 1);
+  assert.equal(rows[0].Nama, 'Budi');
+  assert.equal(rows[0].NIS, '001');
+  assert.equal(rows[0]['Total Pertemuan'], 4);
+  assert.equal(rows[0].H, 3);
+  assert.equal(rows[0].S, 1);
+  assert.equal(rows[0].I, 0);
+  assert.equal(rows[0].A, 0);
+  assert.equal(rows[0]['% Kehadiran'], 75);
+  assert.equal(rows[0].Keterangan, '-');
+
+  assert.equal(rows[1].No, 2);
+  assert.equal(rows[1].Nama, 'Ani');
+  assert.equal(rows[1].NIS, '002');
+  assert.equal(rows[1]['Total Pertemuan'], 4);
+  assert.equal(rows[1].H, 2);
+  assert.equal(rows[1].S, 0);
+  assert.equal(rows[1].I, 1);
+  assert.equal(rows[1].A, 0);
+  assert.equal(rows[1]['% Kehadiran'], 50);
+  assert.equal(rows[1].Keterangan, 'Ada data yang kosong');
 });

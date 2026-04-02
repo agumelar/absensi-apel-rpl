@@ -134,6 +134,20 @@ export const buildRecapExcelTableRows = (rows) => {
   }));
 };
 
+export const buildRecapExcelDataRows = (tableRows) =>
+  buildRecapExcelTableRows(tableRows).map((row, index) => ({
+    No: index + 1,
+    Nama: row.Nama,
+    NIS: row.NIS,
+    'Total Pertemuan': row['Total Pertemuan'],
+    H: row.H,
+    S: row.S,
+    I: row.I,
+    A: row.A,
+    '% Kehadiran': row['% Kehadiran'],
+    Keterangan: Number(row['Belum Diisi'] || 0) > 0 ? 'Ada data yang kosong' : '-',
+  }));
+
 export const buildRecapRequestPeriod = ({ mode = 'monthly', anchorDate, fromDate, toDate } = {}) => {
   const normalizedMode = String(mode || 'monthly').trim().toLowerCase();
   const safeMode = ['today', 'monthly', 'range'].includes(normalizedMode) ? normalizedMode : 'monthly';
