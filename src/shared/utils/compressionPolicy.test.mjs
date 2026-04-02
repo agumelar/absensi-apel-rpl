@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildAdaptiveTargetLadder,
+  retryAsync,
   resolveCompressionMode,
 } from './compressionPolicy.js';
 
@@ -22,4 +23,64 @@ test('resolveCompressionMode returns emergency at > 30KB and <= 50KB', () => {
 
 test('resolveCompressionMode returns failed at > 50KB', () => {
   assert.equal(resolveCompressionMode(51), 'failed');
+});
+
+test('retryAsync retries failed task then succeeds', async () => {
+  let attempts = 0;
+  const result = await retryAsync(
+    async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        throw new Error('temporary failure');
+      }
+      return 'ok';
+    },
+    { retries: 2, delayMs: 0 },
+  );
+
+  assert.equal(result, 'ok');
+  assert.equal(attempts, 3);
+});
+
+test('retryAsync with invalid retries still executes once', async () => {
+  let attempts = 0;
+
+  const result = await retryAsync(
+    async () => {
+      attempts += 1;
+      return 'single-run';
+    },
+    { retries: 'invalid', delayMs: 0 },
+  );
+
+  assert.equal(result, 'single-run');
+  assert.equal(attempts, 1);
+});
+
+test('retryAsync throws Error when retries exhausted', async () => {
+  await assert.rejects(
+    () =>
+      retryAsync(
+        async () => {
+          throw 'boom';
+        },
+        { retries: 1, delayMs: 0 },
+      ),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'boom');
+      return true;
+    },
+  );
+});
+
+test('retryAsync throws clear Error for non-function taskFn', async () => {
+  await assert.rejects(
+    () => retryAsync(null, { retries: 1, delayMs: 0 }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'taskFn wajib berupa fungsi async');
+      return true;
+    },
+  );
 });

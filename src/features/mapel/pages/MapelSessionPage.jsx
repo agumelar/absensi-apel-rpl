@@ -17,7 +17,8 @@ import {
   upsertClassAgenda,
 } from '../../../services/mapelService';
 import { uploadBuktiAbsen, uploadMapelSessionPhoto } from '../../../services/supabase/storageService';
-import { compressImageExtreme } from '../../../shared/utils/compressor';
+import { compressImageAdaptiveForSession } from '../../../shared/utils/compressor';
+import { retryAsync } from '../../../shared/utils/compressionPolicy';
 import { fetchActiveStudentsByKelas } from '../../../services/absensiService';
 import {
   flushMapelSyncQueue,
@@ -388,13 +389,17 @@ const MapelSessionPage = ({ user }) => {
     Swal.fire({ title: 'Memproses foto...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
       const session = await ensureSession();
-      const compressed = await compressImageExtreme(file);
-      const upload = await uploadMapelSessionPhoto({
-        sessionId: session.id,
-        phase,
-        file: compressed.file,
-        metadata: compressed.metadata,
-      });
+      const compressed = await compressImageAdaptiveForSession(file);
+      const upload = await retryAsync(
+        () =>
+          uploadMapelSessionPhoto({
+            sessionId: session.id,
+            phase,
+            file: compressed.file,
+            metadata: compressed.metadata,
+          }),
+        { retries: 2, delayMs: 500 },
+      );
 
       if (phase === 'check_in') {
         await checkInSession(session.id, upload.publicUrl, {
@@ -406,11 +411,18 @@ const MapelSessionPage = ({ user }) => {
         });
       }
 
-      setLastCompressionMeta(compressed.metadata);
+      setLastCompressionMeta(upload.metadata ?? compressed.metadata);
       await loadData();
+
+      const isEmergencyMode = (upload.metadata?.compressionMode ?? compressed.metadata.mode) === 'emergency';
+      const compressedSizeKB = ((upload.metadata?.compressedSizeBytes ?? compressed.metadata.compressedSizeBytes) / 1024).toFixed(1);
+      const successMessage = isEmergencyMode
+        ? `Foto tersimpan mode darurat (${compressedSizeKB}KB).`
+        : `Foto tersimpan optimal (${compressedSizeKB}KB).`;
+
       Swal.fire(
         'Berhasil',
-        `Foto ${phase === 'check_in' ? 'check-in' : 'check-out'} tersimpan (${(compressed.metadata.compressedSizeBytes / 1024).toFixed(1)}KB).`,
+        successMessage,
         'success',
       );
     } catch (error) {

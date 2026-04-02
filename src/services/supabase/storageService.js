@@ -34,9 +34,22 @@ export const uploadMapelSessionPhoto = async ({ sessionId, phase, file, metadata
     data: { publicUrl },
   } = supabase.storage.from(BUKTI_ABSEN_BUCKET).getPublicUrl(filePath);
 
+  const compressionMode = metadata?.mode ?? null;
+  const oversizeEmergency = Boolean(metadata?.oversizeEmergency);
+  const normalizedMetadata = metadata
+    ? {
+        ...metadata,
+        compressionMode,
+        oversizeEmergency,
+      }
+    : {
+        compressionMode,
+        oversizeEmergency,
+      };
+
   return {
     publicUrl,
     filePath,
-    metadata: metadata ?? null,
+    metadata: normalizedMetadata,
   };
 };
