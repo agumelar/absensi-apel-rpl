@@ -23,6 +23,7 @@ import MapelSessionPage from '../features/mapel/pages/MapelSessionPage';
 import MapelScorePage from '../features/mapel/pages/MapelScorePage';
 import MapelSessionHistoryPage from '../features/mapel/pages/MapelSessionHistoryPage';
 import MapelAuditTrailPage from '../features/mapel/pages/MapelAuditTrailPage';
+import MapelAttendanceRecapPage from '../features/mapel/pages/MapelAttendanceRecapPage';
 import RequireRole from './guards/RequireRole';
 import {
   APP_SWITCHER_ROUTE,
@@ -30,6 +31,7 @@ import {
   MAPEL_AUDIT_ROUTE,
   MAPEL_DASHBOARD_ROUTE,
   MAPEL_HISTORY_ROUTE,
+  MAPEL_RECAP_ROUTE,
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
@@ -120,6 +122,14 @@ const AppRoutes = ({
         element={
           <RequireRole allow={canAccessMapel}>
             <MapelSessionHistoryPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_RECAP_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelAttendanceRecapPage user={userData} />
           </RequireRole>
         }
       />

@@ -22,6 +22,7 @@ import {
   Sun,
   Moon,
   FlaskConical,
+  ClipboardList,
 } from 'lucide-react';
 import {
   APP_SWITCHER_ROUTE,
@@ -29,6 +30,7 @@ import {
   MAPEL_AUDIT_ROUTE,
   MAPEL_DASHBOARD_ROUTE,
   MAPEL_HISTORY_ROUTE,
+  MAPEL_RECAP_ROUTE,
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
@@ -88,6 +90,7 @@ const AppShell = ({
     { to: MAPEL_SESSION_ROUTE, icon: ClipboardCheck, label: 'Sesi & Absensi' },
     { to: MAPEL_SCORE_ROUTE, icon: BarChart3, label: 'Nilai Harian' },
     { to: MAPEL_HISTORY_ROUTE, icon: History, label: 'Riwayat Sesi' },
+    { to: MAPEL_RECAP_ROUTE, icon: ClipboardList, label: 'Rekap Kehadiran' },
   ];
 
   const dashboardNavItem = isPiket

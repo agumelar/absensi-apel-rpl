@@ -6,6 +6,11 @@ import {
 } from './auth/sessionService';
 import { isExecutiveRole, isMapelAuditRole, normalizeRole } from '../shared/constants/roles';
 import { getTodayDateWIB } from './shared/dateService';
+import {
+  buildPeriodRange,
+  buildStudentRecapRows,
+  summarizeRecapRows,
+} from '../features/mapel/utils/attendanceRecapRules';
 
 const SESSION_STATUS = {
   HADIR: 'Hadir',
@@ -230,6 +235,174 @@ export const fetchMasterMapel = async () => {
 
   if (error) throw error;
   return data || [];
+};
+
+export const fetchMapelRecapFilterOptions = async ({ guruId } = {}) => {
+  assertRequired('guruId', guruId);
+  assertGuruOwnershipOrThrow(guruId);
+
+  const { data, error } = await supabase
+    .from('schedule')
+    .select('kelas_id, mapel_id, master_kelas(nama_kelas), master_mapel(nama_mapel, kode_mapel)')
+    .eq('guru_id', guruId);
+
+  if (error) throw error;
+
+  const kelasMap = new Map();
+  const mapelMap = new Map();
+
+  (data || []).forEach((row) => {
+    if (row.kelas_id) {
+      kelasMap.set(String(row.kelas_id), {
+        id: row.kelas_id,
+        nama_kelas: row.master_kelas?.nama_kelas || '-',
+      });
+    }
+
+    if (row.mapel_id) {
+      mapelMap.set(String(row.mapel_id), {
+        id: row.mapel_id,
+        nama_mapel: row.master_mapel?.nama_mapel || '-',
+        kode_mapel: row.master_mapel?.kode_mapel || '-',
+      });
+    }
+  });
+
+  return {
+    kelasOptions: [...kelasMap.values()].sort((a, b) =>
+      String(a.nama_kelas || '').localeCompare(String(b.nama_kelas || '')),
+    ),
+    mapelOptions: [...mapelMap.values()].sort((a, b) =>
+      String(a.nama_mapel || '').localeCompare(String(b.nama_mapel || '')),
+    ),
+  };
+};
+
+export const fetchMapelAttendanceRecap = async ({
+  guruId,
+  kelasId,
+  mapelId,
+  periodMode,
+  anchorDate,
+  fromDate,
+  toDate,
+} = {}) => {
+  assertRequired('guruId', guruId);
+  assertRequired('kelasId', kelasId);
+  assertRequired('mapelId', mapelId);
+  assertGuruOwnershipOrThrow(guruId);
+
+  const { data: authorizedSchedule, error: authorizedScheduleError } = await supabase
+    .from('schedule')
+    .select('id')
+    .eq('guru_id', String(guruId))
+    .eq('kelas_id', Number(kelasId))
+    .eq('mapel_id', Number(mapelId))
+    .limit(1)
+    .maybeSingle();
+
+  if (authorizedScheduleError) throw authorizedScheduleError;
+  if (!authorizedSchedule) {
+    throw new Error('Guru tidak memiliki akses rekap untuk kombinasi kelas/mapel ini.');
+  }
+
+  const period = buildPeriodRange({
+    mode: periodMode,
+    anchorDate,
+    fromDate,
+    toDate,
+  });
+
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from('session')
+    .select('id, tanggal, created_at, schedule:schedule_id!inner(guru_id, kelas_id, mapel_id)')
+    .eq('schedule.guru_id', String(guruId))
+    .eq('schedule.kelas_id', Number(kelasId))
+    .eq('schedule.mapel_id', Number(mapelId))
+    .gte('tanggal', period.fromDate)
+    .lte('tanggal', period.toDate)
+    .order('tanggal', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (sessionError) throw sessionError;
+
+  const sessionIds = (sessionRows || []).map((item) => item.id);
+  const [{ data: students, error: studentError }, { data: attendanceRows, error: attendanceError }] =
+    await Promise.all([
+      supabase
+        .from('siswa')
+        .select('id, nama_siswa, nis')
+        .eq('kelas_id', Number(kelasId))
+        .eq('status_siswa', 'Aktif')
+        .order('nama_siswa', { ascending: true }),
+      sessionIds.length > 0
+        ? supabase.from('student_attendance_mapel').select('session_id, siswa_id, status').in('session_id', sessionIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+  if (studentError) throw studentError;
+  if (attendanceError) throw attendanceError;
+
+  const rows = buildStudentRecapRows({
+    students: students || [],
+    sessionIds,
+    attendanceRows: attendanceRows || [],
+  });
+  const summary = summarizeRecapRows(rows);
+
+  const validAttendanceStatuses = new Set([
+    'H',
+    'HADIR',
+    'Hadir',
+    'S',
+    'SAKIT',
+    'Sakit',
+    'I',
+    'IZIN',
+    'Izin',
+    'A',
+    'ALPHA',
+    'Alpha',
+  ]);
+  const filledKeySet = new Set(
+    (attendanceRows || [])
+      .filter((row) => validAttendanceStatuses.has(String(row?.status || '').trim()))
+      .map((row) => `${row.session_id}:${row.siswa_id}`),
+  );
+  const sessionById = new Map((sessionRows || []).map((sessionRow) => [String(sessionRow.id), sessionRow]));
+  const missingEntries = [];
+
+  (students || []).forEach((studentRow) => {
+    sessionIds.forEach((sessionId) => {
+      const key = `${sessionId}:${studentRow.id}`;
+      if (filledKeySet.has(key)) return;
+
+      const sessionData = sessionById.get(String(sessionId));
+      missingEntries.push({
+        session_id: sessionId,
+        session_tanggal: sessionData?.tanggal || null,
+        siswa_id: studentRow.id,
+        nama_siswa: studentRow.nama_siswa || '-',
+        nis: studentRow.nis || '-',
+      });
+    });
+  });
+
+  const postingDate = (sessionRows || []).reduce((latest, row) => {
+    const createdAt = String(row?.created_at || '').trim();
+    if (!createdAt) return latest;
+    if (!latest || createdAt > latest) return createdAt;
+    return latest;
+  }, null);
+
+  return {
+    period,
+    postingDate,
+    totalPertemuan: sessionIds.length,
+    rows,
+    summary,
+    missingEntries,
+  };
 };
 
 export const fetchSchedulesByGuru = async (guruId) => {
@@ -562,6 +735,74 @@ export const upsertStudentAttendanceMapel = async ({ sessionId, siswaId, status 
     .single();
 
   if (error) throw error;
+  return data;
+};
+
+export const fillMissingAttendanceForSession = async ({ sessionId, siswaId, status, actorName } = {}) => {
+  assertRequired('sessionId', sessionId);
+  assertRequired('siswaId', siswaId);
+  assertRequired('status', status);
+  await assertSessionOwnershipOrThrow(sessionId);
+  await enforceAgendaSubmitted(sessionId);
+
+  const normalizedStatusCode = String(status || '').trim().toUpperCase();
+  if (!['H', 'S', 'I', 'A'].includes(normalizedStatusCode)) {
+    throw new Error('Status absensi mapel tidak valid. Gunakan H/S/I/A.');
+  }
+
+  const [{ data: sessionData, error: sessionError }, { data: siswaData, error: siswaError }] = await Promise.all([
+    supabase
+      .from('session')
+      .select('id, schedule:schedule_id!inner(kelas_id)')
+      .eq('id', sessionId)
+      .single(),
+    supabase.from('siswa').select('id, kelas_id').eq('id', siswaId).single(),
+  ]);
+
+  if (sessionError) throw sessionError;
+  if (siswaError) throw siswaError;
+
+  const kelasId = Number(sessionData?.schedule?.kelas_id);
+  const siswaKelasId = Number(siswaData?.kelas_id);
+  if (!kelasId || !siswaKelasId || kelasId !== siswaKelasId) {
+    throw new Error('Siswa tidak terdaftar pada kelas sesi ini.');
+  }
+
+  const payload = {
+    session_id: sessionId,
+    siswa_id: siswaId,
+    status: normalizeAttendanceStatus(normalizedStatusCode),
+    diubah_pada: new Date().toISOString(),
+    diubah_oleh: String(actorName || '').trim() || null,
+  };
+
+  const { data, error } = await supabase
+    .from('student_attendance_mapel')
+    .insert([payload])
+    .select('*')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('Data absensi siswa ini sudah terisi. Gunakan menu sesi untuk koreksi manual.');
+    }
+    throw error;
+  }
+
+  await recordMapelAuditLog({
+    sessionId,
+    actionType: MAPEL_AUDIT_ACTION.ATTENDANCE_MANUAL_SAVE,
+    actorName,
+    metadata: {
+      source: 'recap_backfill_missing',
+      siswa_id: siswaId,
+      status_before: null,
+      status_after: normalizeAttendanceStatus(normalizedStatusCode),
+      diubah_pada: payload.diubah_pada,
+      diubah_oleh: payload.diubah_oleh,
+    },
+  });
+
   return data;
 };
 

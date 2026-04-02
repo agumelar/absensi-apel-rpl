@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   MAPEL_AUDIT_ROUTE,
   MAPEL_HISTORY_ROUTE,
+  MAPEL_RECAP_ROUTE,
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
@@ -131,7 +132,7 @@ const MapelHomePage = ({ user }) => {
       <Card className="rounded-3xl">
         <CardContent className="space-y-4 p-6">
           <h3 className="text-base font-bold text-slate-900">Prioritas Aksi</h3>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             <Link to={MAPEL_SESSION_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operasional</p>
               <p className="mt-1 font-bold text-slate-800">Sesi & Absensi</p>
@@ -141,6 +142,11 @@ const MapelHomePage = ({ user }) => {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Penilaian</p>
               <p className="mt-1 font-bold text-slate-800">Nilai Harian</p>
               <p className="mt-1 text-xs text-slate-600">Input nilai sesi setelah pembelajaran selesai.</p>
+            </Link>
+            <Link to={MAPEL_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
+              <p className="mt-1 font-bold text-slate-800">Rekap Kehadiran</p>
+              <p className="mt-1 text-xs text-slate-600">Rekap H/S/I/A dan tingkat kehadiran per siswa.</p>
             </Link>
             <Link to={MAPEL_HISTORY_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Monitoring</p>
