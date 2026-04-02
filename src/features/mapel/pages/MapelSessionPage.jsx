@@ -19,6 +19,11 @@ import {
 import { uploadBuktiAbsen, uploadMapelSessionPhoto } from '../../../services/supabase/storageService';
 import { compressImageAdaptiveForSession } from '../../../shared/utils/compressor';
 import { retryAsync } from '../../../shared/utils/compressionPolicy';
+import {
+  canCheckOutSession,
+  getAttendanceProgressState,
+  getPhotoActionLabel,
+} from '../utils/sessionWorkflowRules';
 import { fetchActiveStudentsByKelas } from '../../../services/absensiService';
 import {
   flushMapelSyncQueue,
@@ -131,6 +136,49 @@ const MapelSessionPage = ({ user }) => {
     return summary;
   }, [students, attendanceDraft]);
 
+  const attendanceProgress = useMemo(
+    () =>
+      getAttendanceProgressState({
+        filled: attendanceSummary.filled,
+        total: students.length,
+        doneThreshold: 0.9,
+      }),
+    [attendanceSummary.filled, students.length],
+  );
+
+  const hasCheckInPhoto = Boolean(currentSession?.foto_check_in);
+  const hasCheckOutPhoto = Boolean(currentSession?.foto_check_out);
+  const hasCheckInDone = Boolean(currentSession?.waktu_check_in);
+  const checkOutGate = useMemo(
+    () =>
+      canCheckOutSession({
+        hasSchedule: Boolean(selectedScheduleId),
+        hasSession: Boolean(currentSession?.id),
+        hasCheckIn: hasCheckInDone,
+        hasAgendaSubmitted: agendaSubmitted,
+        attendanceCompletionRatio: attendanceProgress.ratio,
+        minAttendanceRatio: 1,
+      }),
+    [selectedScheduleId, currentSession?.id, hasCheckInDone, agendaSubmitted, attendanceProgress.ratio],
+  );
+
+  const checkInButtonLabel = getPhotoActionLabel({
+    hasPhoto: hasCheckInPhoto,
+    defaultLabel: 'Check-In Foto',
+  });
+  const checkOutButtonLabel = getPhotoActionLabel({
+    hasPhoto: hasCheckOutPhoto,
+    defaultLabel: 'Check-Out Foto',
+  });
+
+  const checkOutGateMessage = {
+    schedule_required: 'Pilih jadwal dulu.',
+    session_required: 'Buat sesi dulu (submit agenda atau check-in).',
+    check_in_required: 'Check-Out aktif setelah Check-In selesai.',
+    agenda_required: 'Submit agenda dulu sebelum Check-Out.',
+    attendance_not_ready: 'Check-Out aktif setelah absensi terisi 100%.',
+  };
+
   const statusTone = {
     H: 'bg-blue-600 text-white',
     S: 'bg-green-600 text-white',
@@ -140,7 +188,7 @@ const MapelSessionPage = ({ user }) => {
   const stepStatus = {
     jadwal: Boolean(selectedScheduleId),
     agenda: agendaSubmitted,
-    absensi: attendanceSummary.filled > 0,
+    absensi: attendanceProgress.isDone,
     selesai: Boolean(currentSession?.waktu_check_out),
   };
 
@@ -382,6 +430,26 @@ const MapelSessionPage = ({ user }) => {
   };
 
   const handlePhotoAction = async (phase) => {
+    if (phase === 'check_in' && hasCheckInPhoto && currentSession?.foto_check_in) {
+      await Swal.fire({
+        title: 'Foto Check-In',
+        imageUrl: currentSession.foto_check_in,
+        imageAlt: 'Foto check-in sesi KBM',
+        confirmButtonText: 'Tutup',
+      });
+      return;
+    }
+
+    if (phase === 'check_out' && hasCheckOutPhoto && currentSession?.foto_check_out) {
+      await Swal.fire({
+        title: 'Foto Check-Out',
+        imageUrl: currentSession.foto_check_out,
+        imageAlt: 'Foto check-out sesi KBM',
+        confirmButtonText: 'Tutup',
+      });
+      return;
+    }
+
     const file = await capturePhotoFromCamera(phase);
     if (!file) return;
 
@@ -807,15 +875,15 @@ const MapelSessionPage = ({ user }) => {
                   size="sm"
                   className="bg-green-600 border-green-600 hover:bg-green-700 uppercase tracking-wide"
                 >
-                  Check-In Foto
+                  {checkInButtonLabel}
                 </Button>
                 <Button
                   onClick={() => handlePhotoAction('check_out')}
-                  disabled={loading || !selectedScheduleId || !currentSession}
+                  disabled={loading || !checkOutGate.allowed}
                   size="sm"
                   className="bg-orange-500 border-orange-500 hover:bg-orange-600 uppercase tracking-wide"
                 >
-                  Check-Out Foto
+                  {checkOutButtonLabel}
                 </Button>
                 <Button
                   onClick={handleOpenQrScanner}
@@ -828,6 +896,11 @@ const MapelSessionPage = ({ user }) => {
                 </Button>
               </div>
               <p className="text-xs text-slate-500">QR tetap opsional. Flow utama tetap isi absensi manual di kartu berikutnya.</p>
+              {!checkOutGate.allowed && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  {checkOutGateMessage[checkOutGate.reason] ?? 'Lengkapi langkah sebelumnya sebelum Check-Out.'}
+                </p>
+              )}
               {lastCompressionMeta && (
                 <p className="text-xs text-gray-500">
                   Kompresi terakhir: {(lastCompressionMeta.originalSizeBytes / 1024).toFixed(1)}KB →{' '}
