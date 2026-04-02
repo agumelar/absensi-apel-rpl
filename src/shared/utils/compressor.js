@@ -1,5 +1,11 @@
+import {
+  buildAdaptiveTargetLadder,
+  resolveCompressionMode,
+} from './compressionPolicy.js';
+
 const DEFAULT_MAX_KB = 110;
 const EXTREME_TARGET_KB = 10;
+const ADAPTIVE_MAX_WIDTH_OR_HEIGHT = 960;
 
 const toBytes = (kb) => Math.max(1, Math.floor(kb * 1024));
 
@@ -160,3 +166,52 @@ export const compressImageExtreme = async (file, options = {}) =>
     strict: true,
     ...options,
   });
+
+export const compressImageAdaptiveForSession = async (file, options = {}) => {
+  const {
+    maxWidthOrHeight = ADAPTIVE_MAX_WIDTH_OR_HEIGHT,
+    ...compressionOptions
+  } = options;
+
+  const ladder = buildAdaptiveTargetLadder();
+  let lastAttempt = null;
+
+  for (const attemptTargetKB of ladder) {
+    const attempt = await compressImageWithMeta(file, {
+      ...compressionOptions,
+      targetKB: attemptTargetKB,
+      maxWidthOrHeight,
+      strict: false,
+      grayscale: false,
+    });
+
+    const mode = resolveCompressionMode(attempt.file.size / 1024);
+    const metadata = {
+      ...attempt.metadata,
+      mode,
+      attemptTargetKB,
+      oversizeEmergency: mode === 'emergency',
+    };
+
+    lastAttempt = {
+      file: attempt.file,
+      metadata,
+    };
+
+    if (attempt.file.size <= toBytes(attemptTargetKB)) {
+      return lastAttempt;
+    }
+  }
+
+  if (!lastAttempt) {
+    throw new Error('Kompresi adaptif gagal diproses. Coba pilih ulang foto sesi.');
+  }
+
+  if (lastAttempt.metadata.mode === 'failed') {
+    throw new Error(
+      `Kompresi foto sesi gagal: ukuran akhir ${(lastAttempt.file.size / 1024).toFixed(1)}KB masih di atas batas 50KB. Silakan ambil ulang foto dengan objek lebih dekat dan pencahayaan yang lebih baik.`,
+    );
+  }
+
+  return lastAttempt;
+};
