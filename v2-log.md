@@ -1412,3 +1412,10 @@ Petunjuk cepat:
   - `npm run test:unit` lulus (`8/8` test `compressionPolicy`).
   - `npm test` lulus (`npm run lint && npm run build`).
   - warning minor Node environment tetap sama (`22.10.0` vs rekomendasi `22.12+`), namun build sukses.
+
+## 66) Sprint 55 - Rekapitulasi Kehadiran KBM + Excel Export (Implemented)
+- Rekap KBM aktif dengan warning finalitas saat `totalBelumDiisi > 0` dan badge status `Final/Belum Final` pada hasil rekap.
+- Aksi `Perbaiki Data Bolong` ditambahkan di halaman rekap untuk memilih kombinasi sesi+siswa yang belum terisi lalu submit status `H/S/I/A` via `fillMissingAttendanceForSession`.
+- Service rekap kini mengembalikan daftar `missingEntries` agar UX backfill terarah (bukan input bebas) dan tetap sesuai kelas/mapel/periode aktif.
+- Export Excel kini memakai **dataset aktif saat ini** (tanpa re-query) dan menambahkan baris metadata di atas tabel: `kelas`, `mapel`, `periode`, `posting date`, `finalitas`.
+- Catatan dokumen desain tetap: `docs/superpowers/specs/2026-04-02-kbm-rekapitulasi-kehadiran-design.md`.
