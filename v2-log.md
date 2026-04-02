@@ -1385,7 +1385,7 @@ Petunjuk cepat:
   - `npm test` lulus (`npm run lint && npm run build`).
   - warning minor Node environment tetap sama (`22.10.0` vs rekomendasi `22.12+`), namun build sukses.
 
-## 65) Sprint 54 - Adaptive Compression Ladder for Check-in/Check-out (Planned, Design Locked)
+## 65) Sprint 54 - Adaptive Compression Ladder for Check-in/Check-out (Implemented)
 - Menindaklanjuti kendala operasional pada beberapa perangkat HP di mana check-in/check-out gagal saat kompresi dipaksa ke 10KB.
 - Constraint tetap dipertahankan: Supabase free-tier membutuhkan disiplin ukuran file agar storage aman.
 - Design keputusan (disepakati):
@@ -1397,12 +1397,18 @@ Petunjuk cepat:
   - menghapus kegagalan check-in/check-out akibat hard limit 10KB,
   - menjaga mayoritas upload tetap <=30KB,
   - tetap menjaga keterbacaan konteks foto ruang kelas.
-- Scope teknis implementasi yang sudah dikunci:
-  - `src/shared/utils/compressor.js`: engine adaptive ladder + metadata hasil kompresi,
-  - `src/services/supabase/storageService.js`: dukungan metadata + tag emergency,
-  - `src/features/mapel/pages/MapelSessionPage.jsx`: flow check-in/out konsisten dengan feedback status normal/darurat.
+- Implementasi yang diselesaikan:
+  - `src/shared/utils/compressionPolicy.js` (baru): policy ladder ukuran (`10,15,20,25,30,40,50`), resolver mode (`normal/emergency/failed`), dan helper retry upload `retryAsync`.
+  - `src/shared/utils/compressionPolicy.test.mjs` (baru): unit test policy + retry (8 skenario lulus).
+  - `src/shared/utils/compressor.js`: menambahkan `compressImageAdaptiveForSession(...)` berbasis adaptive ladder untuk flow sesi KBM.
+  - `src/features/mapel/pages/MapelSessionPage.jsx`: flow check-in/check-out memakai kompresi adaptif + retry upload (`retries:2`, `delayMs:500`) + feedback terpisah (`optimal` vs `mode darurat`).
+  - `src/services/supabase/storageService.js`: normalisasi metadata upload sesi (`compressionMode`, `oversizeEmergency`).
 - Observability yang direncanakan:
   - distribusi ukuran mingguan (`<=10KB`, `11-30KB`, `31-50KB`),
   - alert jika rasio emergency melampaui ambang (initial 20%).
 - Catatan dokumen desain:
   - detail desain disimpan di `docs/superpowers/specs/2026-04-02-kbm-checkin-checkout-adaptive-compression-design.md`.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`8/8` test `compressionPolicy`).
+  - `npm test` lulus (`npm run lint && npm run build`).
+  - warning minor Node environment tetap sama (`22.10.0` vs rekomendasi `22.12+`), namun build sukses.
