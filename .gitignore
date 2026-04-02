@@ -8,14 +8,16 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.worktrees
 dist
 dist-ssr
 *.local
+.env*
+!.env.example
 asik.md
 prd.md
 plan.md
 v2.md
-v2-log.md
 skema.md
 
 # Editor directories and files
