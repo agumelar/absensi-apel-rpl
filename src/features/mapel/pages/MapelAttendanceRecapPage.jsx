@@ -6,13 +6,13 @@ import {
   fetchMapelRecapFilterOptions,
   fillMissingAttendanceForSession,
 } from '../../../services/mapelService';
-import { exportJsonToExcel } from '../../../services/shared/excelService';
+import { exportMapelRecapToExcel } from '../../../services/shared/excelService';
 import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Card, { CardContent, CardHeader, CardTitle } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 import Button from '../../../shared/ui/Button';
 import {
-  buildRecapExcelTableRows,
+  buildRecapExcelDataRows,
   buildRecapRequestPeriod,
   formatRecapPeriodLabel,
 } from '../utils/attendanceRecapRules';
@@ -232,47 +232,16 @@ const MapelAttendanceRecapPage = ({ user }) => {
       return;
     }
 
-    const metaRows = [
-      { Informasi: 'Kelas', Nilai: activeKelasLabel },
-      { Informasi: 'Mapel', Nilai: activeMapelLabel },
-      { Informasi: 'Periode', Nilai: periodLabel },
-      { Informasi: 'Posting Date', Nilai: formatDateTime(recap.postingDate) },
-      { Informasi: 'Finalitas', Nilai: recap.summary?.statusLabel || 'Belum Final' },
-    ];
+    const exportRows = buildRecapExcelDataRows(recap.rows);
 
-    const tableRows = buildRecapExcelTableRows(recap.rows);
-    const spacerRow = {
-      Informasi: '',
-      Nilai: '',
-      Nama: '',
-      NIS: '',
-      'Total Pertemuan': '',
-      H: '',
-      S: '',
-      I: '',
-      A: '',
-      'Belum Diisi': '',
-      '% Kehadiran': '',
-    };
-    const tableRowsWithMeta = tableRows.map((row, index) => {
-      if (index === 0) {
-        return {
-          Informasi: 'Nama',
-          Nilai: 'NIS',
-          ...row,
-        };
-      }
-
-      return {
-        Informasi: '',
-        Nilai: '',
-        ...row,
-      };
-    });
-
-    await exportJsonToExcel({
-      rows: [...metaRows, spacerRow, ...tableRowsWithMeta],
-      sheetName: 'Rekap Kehadiran KBM',
+    await exportMapelRecapToExcel({
+      meta: {
+        mapelLabel: activeMapelLabel,
+        kelasLabel: activeKelasLabel,
+        periodeLabel: periodLabel,
+        finalityLabel: recap.summary?.statusLabel || 'Belum Final',
+      },
+      rows: exportRows,
       fileName: `Rekap_KBM_${selectedKelasId || 'kelas'}_${selectedMapelId || 'mapel'}_${
         recap.period?.fromDate || 'from'
       }_${recap.period?.toDate || 'to'}.xlsx`,
