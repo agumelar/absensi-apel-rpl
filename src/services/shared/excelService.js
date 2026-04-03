@@ -192,6 +192,92 @@ export const exportMapelScoreRecapToExcel = async ({
   URL.revokeObjectURL(url);
 };
 
+export const exportMapelSessionHistoryToExcel = async ({
+  meta = {},
+  rows = [],
+  sheetName = 'Riwayat Sesi Mapel',
+  fileName = 'riwayat-sesi-mapel.xlsx',
+} = {}) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  worksheet.columns = [
+    { key: 'no', width: 6 },
+    { key: 'tanggal', width: 14 },
+    { key: 'kelas', width: 18 },
+    { key: 'mapel', width: 26 },
+    { key: 'topik', width: 34 },
+    { key: 'metode', width: 20 },
+    { key: 'h', width: 8 },
+    { key: 's', width: 8 },
+    { key: 'i', width: 8 },
+    { key: 'a', width: 8 },
+    { key: 'status', width: 16 },
+    { key: 'checkin', width: 14 },
+    { key: 'checkout', width: 14 },
+  ];
+
+  const metadataRows = [
+    ['Kelas', String(meta.kelasLabel || 'Semua Kelas')],
+    ['Periode', String(meta.periodeLabel || '-')],
+    ['Total Sesi', String(meta.totalSesiLabel || '0')],
+  ];
+
+  metadataRows.forEach(([label, value]) => {
+    const row = worksheet.addRow(['', label, value]);
+    row.getCell(2).font = { bold: true };
+  });
+
+  worksheet.addRow([]);
+
+  const headerRow = worksheet.addRow([
+    'No',
+    'Tanggal',
+    'Kelas',
+    'Mapel',
+    'Topik',
+    'Metode',
+    'H',
+    'S',
+    'I',
+    'A',
+    'Status',
+    'Check-In',
+    'Check-Out',
+  ]);
+  headerRow.font = { bold: true };
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+  safeRows.forEach((item) => {
+    worksheet.addRow([
+      item.No ?? '',
+      item.Tanggal ?? '-',
+      item.Kelas ?? '-',
+      item.Mapel ?? '-',
+      item.Topik ?? '-',
+      item.Metode ?? '-',
+      item.H ?? 0,
+      item.S ?? 0,
+      item.I ?? 0,
+      item.A ?? 0,
+      item.Status ?? '-',
+      item['Check-In'] ?? '-',
+      item['Check-Out'] ?? '-',
+    ]);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const readExcelFileToJson = async (file) => {
   if (!file) return [];
 

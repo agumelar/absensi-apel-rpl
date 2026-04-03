@@ -86,12 +86,15 @@ const AppShell = ({
   const showExecutiveControlMenu = isExec && !isKurikulumRole;
   const showTeacherPerformanceMenu = isExec && !isKesiswaanRole;
 
-  const navMapel = [
+  const navMapelOperational = [
     { to: MAPEL_SCHEDULE_ROUTE, icon: BookOpen, label: 'Jadwal Mengajar' },
     { to: MAPEL_SESSION_ROUTE, icon: ClipboardCheck, label: 'Sesi & Absensi' },
     { to: MAPEL_SCORE_ROUTE, icon: BarChart3, label: 'Penilaian Keaktifan' },
-    { to: MAPEL_SCORE_RECAP_ROUTE, icon: ClipboardList, label: 'Rekap Penilaian Keaktifan' },
+  ];
+
+  const navMapelReports = [
     { to: MAPEL_HISTORY_ROUTE, icon: History, label: 'Riwayat Sesi' },
+    { to: MAPEL_SCORE_RECAP_ROUTE, icon: ClipboardList, label: 'Rekap Penilaian Keaktifan' },
     { to: MAPEL_RECAP_ROUTE, icon: ClipboardList, label: 'Rekap Kehadiran' },
   ];
 
@@ -195,9 +198,23 @@ const AppShell = ({
 
           {isMapelWorkspace && canAccessMapel && (
             <div className="space-y-2">
-              <SectionLabel>Modul Mapel</SectionLabel>
+              <SectionLabel>Mapel · Operasional</SectionLabel>
               <div className="space-y-1">
-                {navMapel.map(({ to, icon, label }) => (
+                {navMapelOperational.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isMapelWorkspace && canAccessMapel && (
+            <div className="space-y-2">
+              <SectionLabel>Mapel · Laporan</SectionLabel>
+              <div className="space-y-1">
+                {navMapelReports.map(({ to, icon, label }) => (
                   <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
                     {React.createElement(icon, { size: 17, className: 'shrink-0' })}
                     <span>{label}</span>

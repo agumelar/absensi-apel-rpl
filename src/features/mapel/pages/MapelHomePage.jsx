@@ -133,32 +133,46 @@ const MapelHomePage = ({ user }) => {
       <Card className="rounded-3xl">
         <CardContent className="space-y-4 p-6">
           <h3 className="text-base font-bold text-slate-900">Prioritas Aksi</h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-            <Link to={MAPEL_SESSION_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operasional</p>
-              <p className="mt-1 font-bold text-slate-800">Sesi & Absensi</p>
-              <p className="mt-1 text-xs text-slate-600">Check-in/out, agenda, dan absensi siswa.</p>
-            </Link>
-            <Link to={MAPEL_SCORE_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Penilaian</p>
-              <p className="mt-1 font-bold text-slate-800">Penilaian Keaktifan</p>
-              <p className="mt-1 text-xs text-slate-600">Input penilaian keaktifan siswa per sesi.</p>
-            </Link>
-            <Link to={MAPEL_SCORE_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
-              <p className="mt-1 font-bold text-slate-800">Rekap Penilaian Keaktifan</p>
-              <p className="mt-1 text-xs text-slate-600">Rekap periodik penilaian keaktifan per siswa.</p>
-            </Link>
-            <Link to={MAPEL_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
-              <p className="mt-1 font-bold text-slate-800">Rekap Kehadiran</p>
-              <p className="mt-1 text-xs text-slate-600">Rekap H/S/I/A dan tingkat kehadiran per siswa.</p>
-            </Link>
-            <Link to={MAPEL_HISTORY_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Monitoring</p>
-              <p className="mt-1 font-bold text-slate-800">Riwayat Sesi</p>
-              <p className="mt-1 text-xs text-slate-600">Cek histori agenda, absensi, dan status sesi.</p>
-            </Link>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Operasional</p>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <Link to={MAPEL_SESSION_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operasional</p>
+                <p className="mt-1 font-bold text-slate-800">Sesi & Absensi</p>
+                <p className="mt-1 text-xs text-slate-600">Check-in/out, agenda, dan absensi siswa.</p>
+              </Link>
+              <Link to={MAPEL_SCORE_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operasional</p>
+                <p className="mt-1 font-bold text-slate-800">Penilaian Keaktifan</p>
+                <p className="mt-1 text-xs text-slate-600">Input penilaian keaktifan siswa per sesi.</p>
+              </Link>
+              <Link to={MAPEL_SCHEDULE_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operasional</p>
+                <p className="mt-1 font-bold text-slate-800">Jadwal Mengajar</p>
+                <p className="mt-1 text-xs text-slate-600">Lihat dan kelola jadwal mapel aktif.</p>
+              </Link>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Laporan</p>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <Link to={MAPEL_HISTORY_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
+                <p className="mt-1 font-bold text-slate-800">Riwayat Sesi</p>
+                <p className="mt-1 text-xs text-slate-600">Cek histori agenda, absensi, dan status sesi.</p>
+              </Link>
+              <Link to={MAPEL_SCORE_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
+                <p className="mt-1 font-bold text-slate-800">Rekap Penilaian Keaktifan</p>
+                <p className="mt-1 text-xs text-slate-600">Rekap periodik penilaian keaktifan per siswa.</p>
+              </Link>
+              <Link to={MAPEL_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
+                <p className="mt-1 font-bold text-slate-800">Rekap Kehadiran</p>
+                <p className="mt-1 text-xs text-slate-600">Rekap H/S/I/A dan tingkat kehadiran per siswa.</p>
+              </Link>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to={MAPEL_SCHEDULE_ROUTE}>

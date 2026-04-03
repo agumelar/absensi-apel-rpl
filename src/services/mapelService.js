@@ -636,18 +636,26 @@ export const fetchSessionsByTanggal = async (tanggal) => {
   return (data || []).filter((item) => String(item?.schedule?.guru_id ?? '') === String(session.walikelas_id));
 };
 
-export const fetchSessionsByDateRange = async ({ fromDate, toDate }) => {
+export const fetchSessionsByDateRange = async ({ fromDate, toDate, kelasId } = {}) => {
   assertRequired('fromDate', fromDate);
   assertRequired('toDate', toDate);
   const session = assertMapelAccessOrThrow();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('session')
-    .select('*, schedule(*, master_mapel(nama_mapel), master_kelas(nama_kelas))')
+    .select(
+      '*, schedule(*, master_mapel(nama_mapel), master_kelas(nama_kelas)), class_agenda(topik, metode), student_attendance_mapel(status)',
+    )
     .gte('tanggal', fromDate)
     .lte('tanggal', toDate)
     .order('tanggal', { ascending: false })
     .order('created_at', { ascending: false });
+
+  if (kelasId) {
+    query = query.eq('schedule.kelas_id', Number(kelasId));
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   if (session.role === 'admin') return data || [];

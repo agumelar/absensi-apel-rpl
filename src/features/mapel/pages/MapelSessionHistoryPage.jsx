@@ -2,26 +2,42 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 
 import {
+  fetchMapelRecapFilterOptions,
   fetchClassAgendaBySession,
   fetchSessionsByDateRange,
   fetchStudentAttendanceBySession,
   fetchTeacherAbsenceTaskBySession,
 } from '../../../services/mapelService';
+import { exportMapelSessionHistoryToExcel } from '../../../services/shared/excelService';
 import { getDateDaysAgoWIB, getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent, CardHeader, CardTitle } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
+import {
+  buildMonthRangeByOffset,
+  buildSessionHistoryExcelRows,
+} from '../utils/sessionHistoryRules';
 
 const getToday = () => getTodayDateWIB();
 const getLast7DaysDate = () => getDateDaysAgoWIB(6);
 
-const MapelSessionHistoryPage = () => {
+const MapelSessionHistoryPage = ({ user }) => {
   const [fromDate, setFromDate] = useState(getLast7DaysDate());
   const [toDate, setToDate] = useState(getToday());
+  const [kelasOptions, setKelasOptions] = useState([]);
+  const [selectedKelasId, setSelectedKelasId] = useState('');
+  const [loadingFilters, setLoadingFilters] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hasAppliedFilter, setHasAppliedFilter] = useState(false);
   const [rows, setRows] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
+
+  const selectedKelasLabel = useMemo(() => {
+    if (!selectedKelasId) return 'Semua Kelas';
+    const found = kelasOptions.find((item) => String(item.id) === String(selectedKelasId));
+    return found?.nama_kelas || 'Semua Kelas';
+  }, [kelasOptions, selectedKelasId]);
 
   const summary = useMemo(() => {
     const acc = { total: rows.length, hadir: 0, tidakMasuk: 0, pending: 0 };
@@ -37,7 +53,7 @@ const MapelSessionHistoryPage = () => {
   const loadRows = async () => {
     try {
       setLoading(true);
-      const data = await fetchSessionsByDateRange({ fromDate, toDate });
+      const data = await fetchSessionsByDateRange({ fromDate, toDate, kelasId: selectedKelasId || undefined });
       setRows(data);
     } catch (error) {
       Swal.fire('Gagal', error.message, 'error');
@@ -47,9 +63,59 @@ const MapelSessionHistoryPage = () => {
   };
 
   useEffect(() => {
-    loadRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const loadKelasOptions = async () => {
+      if (!user?.id) return;
+
+      try {
+        setLoadingFilters(true);
+        const options = await fetchMapelRecapFilterOptions({ guruId: user.id });
+        setKelasOptions(options.kelasOptions || []);
+      } catch (error) {
+        Swal.fire('Gagal', error.message, 'error');
+      } finally {
+        setLoadingFilters(false);
+      }
+    };
+
+    loadKelasOptions();
+  }, [user?.id]);
+
+  const applyCurrentMonth = () => {
+    const range = buildMonthRangeByOffset(getToday(), 0);
+    setFromDate(range.fromDate);
+    setToDate(range.toDate);
+  };
+
+  const applyPreviousMonth = () => {
+    const range = buildMonthRangeByOffset(getToday(), -1);
+    setFromDate(range.fromDate);
+    setToDate(range.toDate);
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!rows.length) {
+      Swal.fire('Tidak ada data', 'Tidak ada sesi pada filter aktif.', 'info');
+      return;
+    }
+
+    await exportMapelSessionHistoryToExcel({
+      meta: {
+        kelasLabel: selectedKelasLabel,
+        periodeLabel: `${fromDate} s/d ${toDate}`,
+        totalSesiLabel: rows.length,
+      },
+      rows: buildSessionHistoryExcelRows(rows),
+      fileName: `Riwayat_Sesi_${selectedKelasId || 'semua-kelas'}_${fromDate}_${toDate}.xlsx`
+        .replace(/\s+/g, '_')
+        .replace(/[^A-Za-z0-9_.-]/g, ''),
+    });
+  };
+
+  const handleApplyFilter = async () => {
+    await loadRows();
+    setHasAppliedFilter(true);
+    setDetail(null);
+  };
 
   const openDetail = async (sessionRow) => {
     try {
@@ -96,7 +162,24 @@ const MapelSessionHistoryPage = () => {
       </PageHeader>
 
       <Card>
-        <CardContent className="grid gap-3 p-5 md:grid-cols-4 md:p-6">
+        <CardContent className="space-y-3 p-5 md:p-6">
+          <div className="grid gap-3 md:grid-cols-4">
+          <label className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Kelas</span>
+            <select
+              value={selectedKelasId}
+              onChange={(event) => setSelectedKelasId(event.target.value)}
+              disabled={loadingFilters}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Semua Kelas</option>
+              {kelasOptions.map((kelas) => (
+                <option key={kelas.id} value={kelas.id}>
+                  {kelas.nama_kelas}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="space-y-1">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dari</span>
             <input
@@ -115,14 +198,34 @@ const MapelSessionHistoryPage = () => {
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
           </label>
-          <div className="md:col-span-2 flex items-end gap-2">
-            <Button onClick={loadRows} disabled={loading}>
-              {loading ? 'Memuat...' : 'Muat Riwayat'}
+
+          <div className="flex items-end">
+            <Button onClick={handleApplyFilter} disabled={loading}>
+              {loading ? 'Memuat...' : 'Terapkan Filter'}
             </Button>
+          </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" onClick={() => { setFromDate(getLast7DaysDate()); setToDate(getToday()); }}>
               7 Hari Terakhir
             </Button>
+            <Button variant="secondary" onClick={applyCurrentMonth}>
+              Bulan Ini
+            </Button>
+            <Button variant="secondary" onClick={applyPreviousMonth}>
+              Bulan Lalu
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleDownloadExcel}
+              disabled={loading || !hasAppliedFilter || rows.length === 0}
+            >
+              Download Excel Riwayat
+            </Button>
           </div>
+
+          <p className="text-xs text-slate-500">1) Pilih filter 2) Terapkan Filter 3) Download Excel</p>
         </CardContent>
       </Card>
 
@@ -158,6 +261,9 @@ const MapelSessionHistoryPage = () => {
                   <th className="px-3 py-2 text-left">Kelas</th>
                   <th className="px-3 py-2 text-left">Mapel</th>
                   <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Topik</th>
+                  <th className="px-3 py-2 text-left">Metode</th>
+                  <th className="px-3 py-2 text-left">H/S/I/A</th>
                   <th className="px-3 py-2 text-left">Check-In</th>
                   <th className="px-3 py-2 text-left">Check-Out</th>
                   <th className="px-3 py-2 text-left">Aksi</th>
@@ -170,6 +276,25 @@ const MapelSessionHistoryPage = () => {
                     <td className="px-3 py-2">{row.schedule?.master_kelas?.nama_kelas || '-'}</td>
                     <td className="px-3 py-2">{row.schedule?.master_mapel?.nama_mapel || '-'}</td>
                     <td className="px-3 py-2">{row.status || '-'}</td>
+                    <td className="px-3 py-2">{row.class_agenda?.[0]?.topik || '-'}</td>
+                    <td className="px-3 py-2">{row.class_agenda?.[0]?.metode || '-'}</td>
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const summary = (row.student_attendance_mapel || []).reduce(
+                          (acc, item) => {
+                            const key = String(item.status || '').toUpperCase();
+                            if (key === 'HADIR' || key === 'H') acc.H += 1;
+                            if (key === 'SAKIT' || key === 'S') acc.S += 1;
+                            if (key === 'IZIN' || key === 'I') acc.I += 1;
+                            if (key === 'ALPHA' || key === 'A') acc.A += 1;
+                            return acc;
+                          },
+                          { H: 0, S: 0, I: 0, A: 0 },
+                        );
+
+                        return `H:${summary.H} S:${summary.S} I:${summary.I} A:${summary.A}`;
+                      })()}
+                    </td>
                     <td className="px-3 py-2">{row.waktu_check_in ? new Date(row.waktu_check_in).toLocaleTimeString('id-ID') : '-'}</td>
                     <td className="px-3 py-2">{row.waktu_check_out ? new Date(row.waktu_check_out).toLocaleTimeString('id-ID') : '-'}</td>
                     <td className="px-3 py-2">
@@ -181,7 +306,7 @@ const MapelSessionHistoryPage = () => {
                 ))}
                 {!rows.length && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-4 text-center text-slate-500">
+                    <td colSpan={10} className="px-3 py-4 text-center text-slate-500">
                       Belum ada sesi pada rentang tanggal ini.
                     </td>
                   </tr>
