@@ -4,6 +4,7 @@ import {
   MAPEL_AUDIT_ROUTE,
   MAPEL_HISTORY_ROUTE,
   MAPEL_RECAP_ROUTE,
+  MAPEL_SCORE_RECAP_ROUTE,
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
@@ -132,7 +133,7 @@ const MapelHomePage = ({ user }) => {
       <Card className="rounded-3xl">
         <CardContent className="space-y-4 p-6">
           <h3 className="text-base font-bold text-slate-900">Prioritas Aksi</h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
             <Link to={MAPEL_SESSION_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operasional</p>
               <p className="mt-1 font-bold text-slate-800">Sesi & Absensi</p>
@@ -140,8 +141,13 @@ const MapelHomePage = ({ user }) => {
             </Link>
             <Link to={MAPEL_SCORE_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Penilaian</p>
-              <p className="mt-1 font-bold text-slate-800">Nilai Harian</p>
-              <p className="mt-1 text-xs text-slate-600">Input nilai sesi setelah pembelajaran selesai.</p>
+              <p className="mt-1 font-bold text-slate-800">Penilaian Keaktifan</p>
+              <p className="mt-1 text-xs text-slate-600">Input penilaian keaktifan siswa per sesi.</p>
+            </Link>
+            <Link to={MAPEL_SCORE_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>
+              <p className="mt-1 font-bold text-slate-800">Rekap Penilaian Keaktifan</p>
+              <p className="mt-1 text-xs text-slate-600">Rekap periodik penilaian keaktifan per siswa.</p>
             </Link>
             <Link to={MAPEL_RECAP_ROUTE} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100 transition-colors">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pelaporan</p>

@@ -31,6 +31,7 @@ import {
   MAPEL_DASHBOARD_ROUTE,
   MAPEL_HISTORY_ROUTE,
   MAPEL_RECAP_ROUTE,
+  MAPEL_SCORE_RECAP_ROUTE,
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
@@ -88,7 +89,8 @@ const AppShell = ({
   const navMapel = [
     { to: MAPEL_SCHEDULE_ROUTE, icon: BookOpen, label: 'Jadwal Mengajar' },
     { to: MAPEL_SESSION_ROUTE, icon: ClipboardCheck, label: 'Sesi & Absensi' },
-    { to: MAPEL_SCORE_ROUTE, icon: BarChart3, label: 'Nilai Harian' },
+    { to: MAPEL_SCORE_ROUTE, icon: BarChart3, label: 'Penilaian Keaktifan' },
+    { to: MAPEL_SCORE_RECAP_ROUTE, icon: ClipboardList, label: 'Rekap Penilaian Keaktifan' },
     { to: MAPEL_HISTORY_ROUTE, icon: History, label: 'Riwayat Sesi' },
     { to: MAPEL_RECAP_ROUTE, icon: ClipboardList, label: 'Rekap Kehadiran' },
   ];

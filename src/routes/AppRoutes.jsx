@@ -21,6 +21,7 @@ import MapelHomePage from '../features/mapel/pages/MapelHomePage';
 import MapelSchedulePage from '../features/mapel/pages/MapelSchedulePage';
 import MapelSessionPage from '../features/mapel/pages/MapelSessionPage';
 import MapelScorePage from '../features/mapel/pages/MapelScorePage';
+import MapelScoreRecapPage from '../features/mapel/pages/MapelScoreRecapPage';
 import MapelSessionHistoryPage from '../features/mapel/pages/MapelSessionHistoryPage';
 import MapelAuditTrailPage from '../features/mapel/pages/MapelAuditTrailPage';
 import MapelAttendanceRecapPage from '../features/mapel/pages/MapelAttendanceRecapPage';
@@ -32,6 +33,7 @@ import {
   MAPEL_DASHBOARD_ROUTE,
   MAPEL_HISTORY_ROUTE,
   MAPEL_RECAP_ROUTE,
+  MAPEL_SCORE_RECAP_ROUTE,
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
@@ -114,6 +116,14 @@ const AppRoutes = ({
         element={
           <RequireRole allow={canAccessMapel}>
             <MapelScorePage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={MAPEL_SCORE_RECAP_ROUTE}
+        element={
+          <RequireRole allow={canAccessMapel}>
+            <MapelScoreRecapPage user={userData} />
           </RequireRole>
         }
       />

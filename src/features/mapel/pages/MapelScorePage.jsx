@@ -4,11 +4,8 @@ import { Save } from 'lucide-react';
 
 import {
   fetchDailyScoreBySession,
-  fetchMapelRecapFilterOptions,
-  fetchMapelScoreRecap,
   fetchSessionsByTanggal,
 } from '../../../services/mapelService';
-import { exportMapelScoreRecapToExcel } from '../../../services/shared/excelService';
 import { fetchActiveStudentsByKelas } from '../../../services/absensiService';
 import {
   flushMapelSyncQueue,
@@ -20,22 +17,12 @@ import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent, CardHeader, CardTitle } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
-import {
-  buildScoreRecapExcelDataRows,
-  buildRecapRequestPeriod,
-  formatRecapPeriodLabel,
-} from '../utils/scoreRecapRules';
 
 const SCORE_MIN = 0;
 const SCORE_MAX = 100;
 const AUTOSAVE_DELAY_MS = 900;
 const AUTOSAVE_STORAGE_KEY_PREFIX = 'mapel_score_autosave';
 const SCORE_DRAFT_STORAGE_KEY_PREFIX = 'mapel_score_draft';
-const PERIOD_MODE_OPTIONS = [
-  { value: 'today', label: 'Hari Ini' },
-  { value: 'monthly', label: 'Bulanan' },
-  { value: 'range', label: 'Rentang Tanggal' },
-];
 
 const resolveAutosaveStorageKey = (userId) => `${AUTOSAVE_STORAGE_KEY_PREFIX}:${userId ?? 'anonymous'}`;
 const resolveScoreDraftStorageKey = ({ userId, sessionId }) =>
@@ -59,26 +46,6 @@ const MapelScorePage = ({ user }) => {
   const [savedRows, setSavedRows] = useState({});
   const [queuedRows, setQueuedRows] = useState({});
   const [autosaveErrorRows, setAutosaveErrorRows] = useState({});
-  const [loadingRecapFilters, setLoadingRecapFilters] = useState(false);
-  const [loadingScoreRecap, setLoadingScoreRecap] = useState(false);
-  const [hasAppliedScoreRecap, setHasAppliedScoreRecap] = useState(false);
-  const [kelasOptions, setKelasOptions] = useState([]);
-  const [mapelOptions, setMapelOptions] = useState([]);
-  const [selectedKelasId, setSelectedKelasId] = useState('');
-  const [selectedMapelId, setSelectedMapelId] = useState('');
-  const [periodMode, setPeriodMode] = useState('monthly');
-  const [anchorDate, setAnchorDate] = useState(getTodayDateWIB());
-  const [fromDate, setFromDate] = useState(getTodayDateWIB());
-  const [toDate, setToDate] = useState(getTodayDateWIB());
-  const [scoreRecapPeriod, setScoreRecapPeriod] = useState(null);
-  const [scoreRecapRows, setScoreRecapRows] = useState([]);
-  const [scoreRecapSummary, setScoreRecapSummary] = useState({
-    totalSiswa: 0,
-    siswaDinilai: 0,
-    siswaBelumDinilai: 0,
-    rataRataCoverage: 0,
-  });
-  const [scoreRecapTotalPertemuan, setScoreRecapTotalPertemuan] = useState(0);
   const autosaveTimerRef = useRef({});
   const autosaveStorageKey = useMemo(() => resolveAutosaveStorageKey(user?.id), [user?.id]);
   const scoreDraftStorageKey = useMemo(
@@ -118,20 +85,6 @@ const MapelScorePage = ({ user }) => {
       max: Math.max(...validScores),
     };
   }, [students, scoreDraft]);
-
-  const scoreRecapPeriodLabel = useMemo(
-    () => formatRecapPeriodLabel(scoreRecapPeriod),
-    [scoreRecapPeriod],
-  );
-  const activeRecapKelasLabel = useMemo(() => {
-    const found = kelasOptions.find((item) => String(item.id) === String(selectedKelasId));
-    return found?.nama_kelas || '-';
-  }, [kelasOptions, selectedKelasId]);
-  const activeRecapMapelLabel = useMemo(() => {
-    const found = mapelOptions.find((item) => String(item.id) === String(selectedMapelId));
-    if (!found) return '-';
-    return found.kode_mapel ? `${found.nama_mapel} (${found.kode_mapel})` : found.nama_mapel;
-  }, [mapelOptions, selectedMapelId]);
 
   const refreshSyncSummary = () => {
     try {
@@ -247,34 +200,6 @@ const MapelScorePage = ({ user }) => {
       autosaveTimerRef.current = {};
     };
   }, []);
-
-  useEffect(() => {
-    const loadRecapFilterOptions = async () => {
-      if (!user?.id) return;
-
-      try {
-        setLoadingRecapFilters(true);
-        const options = await fetchMapelRecapFilterOptions({ guruId: user.id });
-        setKelasOptions(options.kelasOptions || []);
-        setMapelOptions(options.mapelOptions || []);
-
-        const firstKelas = options.kelasOptions?.[0]?.id;
-        const firstMapel = options.mapelOptions?.[0]?.id;
-        if (firstKelas !== undefined && firstKelas !== null) {
-          setSelectedKelasId(String(firstKelas));
-        }
-        if (firstMapel !== undefined && firstMapel !== null) {
-          setSelectedMapelId(String(firstMapel));
-        }
-      } catch (error) {
-        Swal.fire('Gagal', error.message, 'error');
-      } finally {
-        setLoadingRecapFilters(false);
-      }
-    };
-
-    loadRecapFilterOptions();
-  }, [user?.id]);
 
   const refreshScoreFromServer = async () => {
     if (!selectedSession?.id) return;
@@ -565,84 +490,13 @@ const MapelScorePage = ({ user }) => {
     }
   };
 
-  const handleApplyScoreRecap = async () => {
-    if (!user?.id) {
-      Swal.fire('Gagal', 'User tidak valid.', 'error');
-      return;
-    }
-
-    if (!selectedKelasId || !selectedMapelId) {
-      Swal.fire('Validasi', 'Kelas dan mapel wajib dipilih.', 'warning');
-      return;
-    }
-
-    if (periodMode === 'range' && (!fromDate || !toDate)) {
-      Swal.fire('Validasi', 'Dari/Sampai tanggal wajib diisi untuk mode rentang.', 'warning');
-      return;
-    }
-
-    try {
-      setLoadingScoreRecap(true);
-      const periodPayload = buildRecapRequestPeriod({
-        mode: periodMode,
-        anchorDate,
-        fromDate,
-        toDate,
-      });
-
-      const result = await fetchMapelScoreRecap({
-        guruId: user.id,
-        kelasId: selectedKelasId,
-        mapelId: selectedMapelId,
-        ...periodPayload,
-      });
-
-      setScoreRecapRows(result.rows || []);
-      setScoreRecapSummary(
-        result.summary || {
-          totalSiswa: 0,
-          siswaDinilai: 0,
-          siswaBelumDinilai: 0,
-          rataRataCoverage: 0,
-        },
-      );
-      setScoreRecapTotalPertemuan(Number(result.totalPertemuan || 0));
-      setScoreRecapPeriod(result.period || null);
-      setHasAppliedScoreRecap(true);
-    } catch (error) {
-      Swal.fire('Gagal', error.message, 'error');
-    } finally {
-      setLoadingScoreRecap(false);
-    }
-  };
-
-  const handleDownloadScoreRecapExcel = async () => {
-    if (!hasAppliedScoreRecap || scoreRecapRows.length === 0) {
-      Swal.fire('Tidak ada data', 'Terapkan filter rekap nilai dulu sebelum export.', 'info');
-      return;
-    }
-
-    await exportMapelScoreRecapToExcel({
-      meta: {
-        kelasLabel: activeRecapKelasLabel,
-        mapelLabel: activeRecapMapelLabel,
-        periodeLabel: scoreRecapPeriodLabel,
-        totalPertemuanLabel: scoreRecapTotalPertemuan,
-      },
-      rows: buildScoreRecapExcelDataRows(scoreRecapRows),
-      fileName: `Rekap_Nilai_Harian_${selectedKelasId || 'kelas'}_${selectedMapelId || 'mapel'}_${scoreRecapPeriod?.fromDate || 'from'}_${scoreRecapPeriod?.toDate || 'to'}.xlsx`
-        .replace(/\s+/g, '_')
-        .replace(/[^A-Za-z0-9_.-]/g, ''),
-    });
-  };
-
   return (
     <PageContainer>
       <PageHeader>
         <div className="space-y-2">
           <PageSubtitle>Modul Mapel</PageSubtitle>
-          <PageTitle className="text-2xl md:text-3xl">Nilai Harian</PageTitle>
-          <p className="text-sm text-slate-600">Input nilai bonus keaktifan per sesi mengajar dengan rentang nilai 0-100.</p>
+          <PageTitle className="text-2xl md:text-3xl">Penilaian Keaktifan</PageTitle>
+          <p className="text-sm text-slate-600">Input penilaian keaktifan per sesi mengajar dengan rentang nilai 0-100.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={() => setAutosaveEnabled((prev) => !prev)}>
@@ -655,16 +509,9 @@ const MapelScorePage = ({ user }) => {
           >
             {syncingQueue ? 'Sinkronisasi...' : `Sinkron Offline (${syncSummary.total})`}
           </Button>
-          <Button
-            variant="secondary"
-            onClick={handleDownloadScoreRecapExcel}
-            disabled={loadingScoreRecap || !hasAppliedScoreRecap || scoreRecapRows.length === 0}
-          >
-            Download Excel Rekap
-          </Button>
           <Button onClick={handleSave} disabled={saving || loading || !selectedSessionId}>
             <Save size={16} />
-            {saving ? 'Menyimpan...' : 'Simpan Nilai'}
+            {saving ? 'Menyimpan...' : 'Simpan Penilaian'}
           </Button>
         </div>
       </PageHeader>
@@ -703,7 +550,7 @@ const MapelScorePage = ({ user }) => {
 
       <Card className="mt-4">
         <CardHeader className="pb-4">
-          <CardTitle>Daftar Nilai Siswa</CardTitle>
+          <CardTitle>Daftar Penilaian Siswa</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2 md:grid-cols-4">
@@ -799,182 +646,13 @@ const MapelScorePage = ({ user }) => {
                 {!filteredStudents.length && (
                   <tr>
                     <td colSpan={5} className="px-3 py-5 text-center text-slate-500">
-                      {selectedSessionId ? 'Tidak ada siswa aktif untuk kelas ini.' : 'Pilih sesi untuk mulai input nilai.'}
+                      {selectedSessionId ? 'Tidak ada siswa aktif untuk kelas ini.' : 'Pilih sesi untuk mulai input penilaian.'}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader className="pb-4">
-          <CardTitle>Rekap Nilai Keaktifan (Bonus)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Kelas</span>
-              <select
-                value={selectedKelasId}
-                onChange={(event) => setSelectedKelasId(event.target.value)}
-                disabled={loadingRecapFilters}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {!kelasOptions.length && <option value="">Tidak ada kelas</option>}
-                {kelasOptions.map((kelas) => (
-                  <option key={kelas.id} value={kelas.id}>
-                    {kelas.nama_kelas}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mapel</span>
-              <select
-                value={selectedMapelId}
-                onChange={(event) => setSelectedMapelId(event.target.value)}
-                disabled={loadingRecapFilters}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {!mapelOptions.length && <option value="">Tidak ada mapel</option>}
-                {mapelOptions.map((mapel) => (
-                  <option key={mapel.id} value={mapel.id}>
-                    {mapel.nama_mapel} ({mapel.kode_mapel || '-'})
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mode Periode</span>
-              <select
-                value={periodMode}
-                onChange={(event) => setPeriodMode(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {PERIOD_MODE_OPTIONS.map((modeOption) => (
-                  <option key={modeOption.value} value={modeOption.value}>
-                    {modeOption.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="flex items-end">
-              <Button
-                onClick={handleApplyScoreRecap}
-                disabled={loadingRecapFilters || loadingScoreRecap || !selectedKelasId || !selectedMapelId}
-              >
-                {loadingScoreRecap ? 'Memuat...' : 'Terapkan Rekap'}
-              </Button>
-            </div>
-          </div>
-
-          {periodMode === 'range' ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dari Tanggal</span>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(event) => setFromDate(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sampai Tanggal</span>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(event) => setToDate(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                />
-              </label>
-            </div>
-          ) : (
-            <label className="space-y-1 block max-w-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {periodMode === 'today' ? 'Tanggal' : 'Tanggal Acuan'}
-              </span>
-              <input
-                type="date"
-                value={anchorDate}
-                onChange={(event) => setAnchorDate(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
-            </label>
-          )}
-
-          {hasAppliedScoreRecap && (
-            <>
-              <div className="grid gap-2 md:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Total Pertemuan</p>
-                  <p className="text-lg font-bold text-slate-800">{scoreRecapTotalPertemuan}</p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Siswa Dinilai</p>
-                  <p className="text-lg font-bold text-slate-800">
-                    {scoreRecapSummary.siswaDinilai}/{scoreRecapSummary.totalSiswa}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Belum Dinilai</p>
-                  <p className="text-lg font-bold text-slate-800">{scoreRecapSummary.siswaBelumDinilai}</p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Rata-rata Cakupan Penilaian</p>
-                  <p className="text-lg font-bold text-slate-800">{scoreRecapSummary.rataRataCoverage}%</p>
-                </div>
-              </div>
-
-              <p className="text-xs font-medium text-slate-500">Periode aktif: {scoreRecapPeriodLabel}</p>
-
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="premium-table min-w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="px-3 py-2 text-left">Nama</th>
-                      <th className="px-3 py-2 text-left">NIS</th>
-                      <th className="px-3 py-2 text-right">Total Pertemuan</th>
-                      <th className="px-3 py-2 text-right">Frekuensi Dinilai</th>
-                      <th className="px-3 py-2 text-right">Cakupan Penilaian (%)</th>
-                      <th className="px-3 py-2 text-right">Total Poin</th>
-                      <th className="px-3 py-2 text-right">Rata-rata Saat Diberi Nilai</th>
-                      <th className="px-3 py-2 text-left">Keterangan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scoreRecapRows.map((row) => (
-                      <tr key={row.siswa_id}>
-                        <td className="px-3 py-2 font-medium text-slate-800">{row.nama_siswa || '-'}</td>
-                        <td className="px-3 py-2 text-slate-700">{row.nis || '-'}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{row.total_pertemuan}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{row.frekuensi_dinilai}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{row.coverage_persen}%</td>
-                        <td className="px-3 py-2 text-right font-semibold">{row.total_poin}</td>
-                        <td className="px-3 py-2 text-right font-semibold">
-                          {row.rata_rata_saat_dinilai === null ? '-' : row.rata_rata_saat_dinilai}
-                        </td>
-                        <td className="px-3 py-2 text-slate-700">{row.keterangan || '-'}</td>
-                      </tr>
-                    ))}
-                    {scoreRecapRows.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="px-3 py-5 text-center text-slate-500">
-                          Tidak ada data nilai untuk filter periode ini.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
         </CardContent>
       </Card>
     </PageContainer>
