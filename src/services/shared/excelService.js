@@ -116,6 +116,82 @@ export const exportMapelRecapToExcel = async ({
   URL.revokeObjectURL(url);
 };
 
+export const exportMapelScoreRecapToExcel = async ({
+  meta = {},
+  rows = [],
+  sheetName = 'Rekap Nilai Keaktifan KBM',
+  fileName = 'rekap-nilai-harian-kbm.xlsx',
+} = {}) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  worksheet.columns = [
+    { key: 'no', width: 6 },
+    { key: 'nama', width: 32 },
+    { key: 'nis', width: 16 },
+    { key: 'total', width: 16 },
+    { key: 'frekuensi', width: 18 },
+    { key: 'coverage', width: 12 },
+    { key: 'totalPoin', width: 14 },
+    { key: 'rataRata', width: 22 },
+    { key: 'keterangan', width: 20 },
+  ];
+
+  const metadataRows = [
+    ['Kelas', String(meta.kelasLabel || '-')],
+    ['Mapel', String(meta.mapelLabel || '-')],
+    ['Periode', String(meta.periodeLabel || '-')],
+    ['Total Pertemuan', String(meta.totalPertemuanLabel || '0')],
+    ['Jenis Rekap', 'Nilai Keaktifan (Bonus / Opsional)'],
+  ];
+
+  metadataRows.forEach(([label, value]) => {
+    const row = worksheet.addRow(['', label, value]);
+    row.getCell(2).font = { bold: true };
+  });
+
+  worksheet.addRow([]);
+
+  const headerRow = worksheet.addRow([
+    'No',
+    'Nama',
+    'NIS',
+    'Total Pertemuan',
+    'Frekuensi Dinilai',
+    'Cakupan Penilaian (%)',
+    'Total Poin',
+    'Rata-rata Saat Diberi Nilai',
+    'Keterangan',
+  ]);
+  headerRow.font = { bold: true };
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+  safeRows.forEach((item) => {
+    worksheet.addRow([
+      item.No ?? '',
+      item.Nama ?? '-',
+      item.NIS ?? '-',
+      item['Total Pertemuan'] ?? 0,
+      item['Frekuensi Dinilai'] ?? 0,
+      item['Cakupan Penilaian (%)'] ?? 0,
+      item['Total Poin'] ?? 0,
+      item['Rata-rata Saat Diberi Nilai'] ?? '-',
+      item.Keterangan ?? '-',
+    ]);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const readExcelFileToJson = async (file) => {
   if (!file) return [];
 

@@ -11,6 +11,10 @@ import {
   buildStudentRecapRows,
   summarizeRecapRows,
 } from '../features/mapel/utils/attendanceRecapRules';
+import {
+  buildScoreRecapRows,
+  summarizeScoreRecapRows,
+} from '../features/mapel/utils/scoreRecapRules';
 
 const SESSION_STATUS = {
   HADIR: 'Hadir',
@@ -402,6 +406,93 @@ export const fetchMapelAttendanceRecap = async ({
     rows,
     summary,
     missingEntries,
+  };
+};
+
+export const fetchMapelScoreRecap = async ({
+  guruId,
+  kelasId,
+  mapelId,
+  periodMode,
+  anchorDate,
+  fromDate,
+  toDate,
+} = {}) => {
+  assertRequired('guruId', guruId);
+  assertRequired('kelasId', kelasId);
+  assertRequired('mapelId', mapelId);
+  assertGuruOwnershipOrThrow(guruId);
+
+  const { data: authorizedSchedule, error: authorizedScheduleError } = await supabase
+    .from('schedule')
+    .select('id')
+    .eq('guru_id', String(guruId))
+    .eq('kelas_id', Number(kelasId))
+    .eq('mapel_id', Number(mapelId))
+    .limit(1)
+    .maybeSingle();
+
+  if (authorizedScheduleError) throw authorizedScheduleError;
+  if (!authorizedSchedule) {
+    throw new Error('Guru tidak memiliki akses rekap nilai untuk kombinasi kelas/mapel ini.');
+  }
+
+  const period = buildPeriodRange({
+    mode: periodMode,
+    anchorDate,
+    fromDate,
+    toDate,
+  });
+
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from('session')
+    .select('id, tanggal, created_at, schedule:schedule_id!inner(guru_id, kelas_id, mapel_id)')
+    .eq('schedule.guru_id', String(guruId))
+    .eq('schedule.kelas_id', Number(kelasId))
+    .eq('schedule.mapel_id', Number(mapelId))
+    .gte('tanggal', period.fromDate)
+    .lte('tanggal', period.toDate)
+    .order('tanggal', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (sessionError) throw sessionError;
+
+  const sessionIds = (sessionRows || []).map((item) => item.id);
+  const [{ data: students, error: studentError }, { data: scoreRows, error: scoreError }] = await Promise.all([
+    supabase
+      .from('siswa')
+      .select('id, nama_siswa, nis')
+      .eq('kelas_id', Number(kelasId))
+      .eq('status_siswa', 'Aktif')
+      .order('nama_siswa', { ascending: true }),
+    sessionIds.length > 0
+      ? supabase.from('daily_score').select('session_id, siswa_id, nilai').in('session_id', sessionIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (studentError) throw studentError;
+  if (scoreError) throw scoreError;
+
+  const rows = buildScoreRecapRows({
+    students: students || [],
+    sessionIds,
+    scoreRows: scoreRows || [],
+  });
+  const summary = summarizeScoreRecapRows(rows);
+
+  const postingDate = (sessionRows || []).reduce((latest, row) => {
+    const createdAt = String(row?.created_at || '').trim();
+    if (!createdAt) return latest;
+    if (!latest || createdAt > latest) return createdAt;
+    return latest;
+  }, null);
+
+  return {
+    period,
+    postingDate,
+    totalPertemuan: sessionIds.length,
+    rows,
+    summary,
   };
 };
 
