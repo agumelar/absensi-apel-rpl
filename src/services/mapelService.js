@@ -15,6 +15,11 @@ import {
   buildScoreRecapRows,
   summarizeScoreRecapRows,
 } from '../features/mapel/utils/scoreRecapRules';
+import {
+  buildSessionClassMap,
+  buildStudentClassMap,
+  findFirstAttendanceClassMismatch,
+} from '../features/mapel/utils/attendanceIntegrityRules';
 
 const SESSION_STATUS = {
   HADIR: 'Hadir',
@@ -821,6 +826,24 @@ export const upsertStudentAttendanceMapel = async ({ sessionId, siswaId, status 
   await assertSessionOwnershipOrThrow(sessionId);
   await enforceAgendaSubmitted(sessionId);
 
+  const [{ data: sessionData, error: sessionError }, { data: siswaData, error: siswaError }] = await Promise.all([
+    supabase
+      .from('session')
+      .select('id, schedule:schedule_id!inner(kelas_id)')
+      .eq('id', sessionId)
+      .single(),
+    supabase.from('siswa').select('id, kelas_id').eq('id', siswaId).single(),
+  ]);
+
+  if (sessionError) throw sessionError;
+  if (siswaError) throw siswaError;
+
+  const kelasId = Number(sessionData?.schedule?.kelas_id);
+  const siswaKelasId = Number(siswaData?.kelas_id);
+  if (!kelasId || !siswaKelasId || kelasId !== siswaKelasId) {
+    throw new Error('Siswa tidak terdaftar pada kelas sesi ini.');
+  }
+
   const payload = {
     session_id: sessionId,
     siswa_id: siswaId,
@@ -918,6 +941,32 @@ export const upsertBulkStudentAttendanceMapel = async (entries, options = {}) =>
 
   await Promise.all(sessionIds.map((sessionId) => assertSessionOwnershipOrThrow(sessionId)));
   await Promise.all(sessionIds.map((sessionId) => enforceAgendaSubmitted(sessionId)));
+
+  const siswaIds = [...new Set(entries.map((entry) => entry.siswaId).filter(Boolean))];
+  const [{ data: sessionRows, error: sessionError }, { data: siswaRows, error: siswaError }] = await Promise.all([
+    supabase
+      .from('session')
+      .select('id, schedule:schedule_id!inner(kelas_id)')
+      .in('id', sessionIds),
+    siswaIds.length
+      ? supabase.from('siswa').select('id, kelas_id').in('id', siswaIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (sessionError) throw sessionError;
+  if (siswaError) throw siswaError;
+
+  const mismatch = findFirstAttendanceClassMismatch(
+    entries,
+    buildSessionClassMap(sessionRows),
+    buildStudentClassMap(siswaRows),
+  );
+
+  if (mismatch) {
+    throw new Error(
+      `Data absensi tidak valid: siswa ${mismatch.siswaId || '-'} bukan bagian dari kelas sesi ${mismatch.sessionId || '-'}.`,
+    );
+  }
 
   const payload = entries.map((entry) => ({
     session_id: entry.sessionId,
