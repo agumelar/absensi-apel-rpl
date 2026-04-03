@@ -213,6 +213,8 @@ export const exportMapelSessionHistoryToExcel = async ({
     { key: 'i', width: 8 },
     { key: 'a', width: 8 },
     { key: 'status', width: 16 },
+    { key: 'taskDeliveryStatus', width: 26 },
+    { key: 'taskDeliveryTime', width: 18 },
     { key: 'checkin', width: 14 },
     { key: 'checkout', width: 14 },
   ];
@@ -242,6 +244,8 @@ export const exportMapelSessionHistoryToExcel = async ({
     'I',
     'A',
     'Status',
+    'Status Distribusi Tugas',
+    'Waktu Distribusi',
     'Check-In',
     'Check-Out',
   ]);
@@ -261,6 +265,8 @@ export const exportMapelSessionHistoryToExcel = async ({
       item.I ?? 0,
       item.A ?? 0,
       item.Status ?? '-',
+      item['Status Distribusi Tugas'] ?? '-',
+      item['Waktu Distribusi'] ?? '-',
       item['Check-In'] ?? '-',
       item['Check-Out'] ?? '-',
     ]);

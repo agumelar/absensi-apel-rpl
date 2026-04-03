@@ -644,7 +644,7 @@ export const fetchSessionsByDateRange = async ({ fromDate, toDate, kelasId } = {
   let query = supabase
     .from('session')
     .select(
-      '*, schedule(*, master_mapel(nama_mapel), master_kelas(nama_kelas)), class_agenda(topik, metode), student_attendance_mapel(status)',
+      '*, schedule(*, master_mapel(nama_mapel), master_kelas(nama_kelas)), class_agenda(topik, metode), student_attendance_mapel(status), teacher_absence_task(id, delivered_by_picket, delivered_at)',
     )
     .gte('tanggal', fromDate)
     .lte('tanggal', toDate)

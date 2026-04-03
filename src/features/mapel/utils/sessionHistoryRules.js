@@ -45,7 +45,6 @@ export const toLocalTimeLabel = (isoDateTime) => {
   return new Intl.DateTimeFormat('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false,
   }).format(date);
 };
@@ -74,12 +73,42 @@ const summarizeAttendanceByCode = (attendanceRows) => {
   );
 };
 
+const resolveAbsenceTask = (row) => {
+  const task = Array.isArray(row?.teacher_absence_task) ? row.teacher_absence_task[0] : row?.teacher_absence_task;
+  return task || null;
+};
+
+export const resolveTaskDeliverySummary = (row) => {
+  const task = resolveAbsenceTask(row);
+  if (!task) {
+    return {
+      taskId: null,
+      deliveredByPicket: false,
+      deliveredAtRaw: null,
+      deliveryStatusLabel: '-',
+      deliveryTimeLabel: '-',
+    };
+  }
+
+  const deliveredByPicket = Boolean(task.delivered_by_picket);
+  const deliveredAtRaw = task.delivered_at || null;
+
+  return {
+    taskId: task.id ?? null,
+    deliveredByPicket,
+    deliveredAtRaw,
+    deliveryStatusLabel: deliveredByPicket ? 'Sudah Didistribusikan' : 'Menunggu Distribusi',
+    deliveryTimeLabel: deliveredByPicket ? toLocalTimeLabel(deliveredAtRaw) : '-',
+  };
+};
+
 export const buildSessionHistoryExcelRows = (rows) => {
   const safeRows = Array.isArray(rows) ? rows : [];
 
   return safeRows.map((row, index) => {
     const agenda = resolveAgenda(row);
     const attendanceSummary = summarizeAttendanceByCode(row?.student_attendance_mapel);
+    const taskDelivery = resolveTaskDeliverySummary(row);
     return {
       No: index + 1,
       Tanggal: row?.tanggal || '-',
@@ -92,6 +121,8 @@ export const buildSessionHistoryExcelRows = (rows) => {
       I: attendanceSummary.I,
       A: attendanceSummary.A,
       Status: row?.status || '-',
+      'Status Distribusi Tugas': taskDelivery.deliveryStatusLabel,
+      'Waktu Distribusi': taskDelivery.deliveryTimeLabel,
       'Check-In': toLocalTimeLabel(row?.waktu_check_in),
       'Check-Out': toLocalTimeLabel(row?.waktu_check_out),
     };

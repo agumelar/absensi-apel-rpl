@@ -16,6 +16,7 @@ import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../sha
 import {
   buildMonthRangeByOffset,
   buildSessionHistoryExcelRows,
+  resolveTaskDeliverySummary,
 } from '../utils/sessionHistoryRules';
 
 const getToday = () => getTodayDateWIB();
@@ -264,49 +265,68 @@ const MapelSessionHistoryPage = ({ user }) => {
                   <th className="px-3 py-2 text-left">Topik</th>
                   <th className="px-3 py-2 text-left">Metode</th>
                   <th className="px-3 py-2 text-left">H/S/I/A</th>
+                  <th className="px-3 py-2 text-left">Status Distribusi Tugas</th>
+                  <th className="px-3 py-2 text-left">Waktu Distribusi</th>
                   <th className="px-3 py-2 text-left">Check-In</th>
                   <th className="px-3 py-2 text-left">Check-Out</th>
                   <th className="px-3 py-2 text-left">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-3 py-2">{row.tanggal || '-'}</td>
-                    <td className="px-3 py-2">{row.schedule?.master_kelas?.nama_kelas || '-'}</td>
-                    <td className="px-3 py-2">{row.schedule?.master_mapel?.nama_mapel || '-'}</td>
-                    <td className="px-3 py-2">{row.status || '-'}</td>
-                    <td className="px-3 py-2">{row.class_agenda?.[0]?.topik || '-'}</td>
-                    <td className="px-3 py-2">{row.class_agenda?.[0]?.metode || '-'}</td>
-                    <td className="px-3 py-2">
-                      {(() => {
-                        const summary = (row.student_attendance_mapel || []).reduce(
-                          (acc, item) => {
-                            const key = String(item.status || '').toUpperCase();
-                            if (key === 'HADIR' || key === 'H') acc.H += 1;
-                            if (key === 'SAKIT' || key === 'S') acc.S += 1;
-                            if (key === 'IZIN' || key === 'I') acc.I += 1;
-                            if (key === 'ALPHA' || key === 'A') acc.A += 1;
-                            return acc;
-                          },
-                          { H: 0, S: 0, I: 0, A: 0 },
-                        );
+                {rows.map((row) => {
+                  const attendanceSummary = (row.student_attendance_mapel || []).reduce(
+                    (acc, item) => {
+                      const key = String(item.status || '').toUpperCase();
+                      if (key === 'HADIR' || key === 'H') acc.H += 1;
+                      if (key === 'SAKIT' || key === 'S') acc.S += 1;
+                      if (key === 'IZIN' || key === 'I') acc.I += 1;
+                      if (key === 'ALPHA' || key === 'A') acc.A += 1;
+                      return acc;
+                    },
+                    { H: 0, S: 0, I: 0, A: 0 },
+                  );
+                  const taskDelivery = resolveTaskDeliverySummary(row);
+                  const deliveryBadgeClass =
+                    taskDelivery.deliveryStatusLabel === 'Sudah Didistribusikan'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : taskDelivery.deliveryStatusLabel === 'Menunggu Distribusi'
+                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-600';
 
-                        return `H:${summary.H} S:${summary.S} I:${summary.I} A:${summary.A}`;
-                      })()}
-                    </td>
-                    <td className="px-3 py-2">{row.waktu_check_in ? new Date(row.waktu_check_in).toLocaleTimeString('id-ID') : '-'}</td>
-                    <td className="px-3 py-2">{row.waktu_check_out ? new Date(row.waktu_check_out).toLocaleTimeString('id-ID') : '-'}</td>
-                    <td className="px-3 py-2">
-                      <Button variant="secondary" size="sm" onClick={() => openDetail(row)} disabled={detailLoading}>
-                        Detail
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                  return (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">{row.tanggal || '-'}</td>
+                      <td className="px-3 py-2">{row.schedule?.master_kelas?.nama_kelas || '-'}</td>
+                      <td className="px-3 py-2">{row.schedule?.master_mapel?.nama_mapel || '-'}</td>
+                      <td className="px-3 py-2">{row.status || '-'}</td>
+                      <td className="px-3 py-2">{row.class_agenda?.[0]?.topik || '-'}</td>
+                      <td className="px-3 py-2">{row.class_agenda?.[0]?.metode || '-'}</td>
+                      <td className="px-3 py-2">{`H:${attendanceSummary.H} S:${attendanceSummary.S} I:${attendanceSummary.I} A:${attendanceSummary.A}`}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${deliveryBadgeClass}`}
+                        >
+                          {taskDelivery.deliveryStatusLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{taskDelivery.deliveryTimeLabel}</td>
+                      <td className="px-3 py-2">
+                        {row.waktu_check_in ? new Date(row.waktu_check_in).toLocaleTimeString('id-ID') : '-'}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row.waktu_check_out ? new Date(row.waktu_check_out).toLocaleTimeString('id-ID') : '-'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Button variant="secondary" size="sm" onClick={() => openDetail(row)} disabled={detailLoading}>
+                          Detail
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!rows.length && (
                   <tr>
-                    <td colSpan={10} className="px-3 py-4 text-center text-slate-500">
+                    <td colSpan={12} className="px-3 py-4 text-center text-slate-500">
                       Belum ada sesi pada rentang tanggal ini.
                     </td>
                   </tr>

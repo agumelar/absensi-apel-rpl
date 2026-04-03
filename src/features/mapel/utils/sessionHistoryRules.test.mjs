@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildMonthRangeByOffset,
   buildSessionHistoryExcelRows,
+  resolveTaskDeliverySummary,
   toLocalTimeLabel,
 } from './sessionHistoryRules.js';
 
@@ -24,7 +25,7 @@ test('buildMonthRangeByOffset supports previous month', () => {
 test('toLocalTimeLabel converts ISO string into readable time', () => {
   const label = toLocalTimeLabel('2026-04-02T01:10:00.000Z');
 
-  assert.match(label, /^\d{2}\.\d{2}\.\d{2}$/);
+  assert.match(label, /^\d{2}\.\d{2}$/);
 });
 
 test('buildSessionHistoryExcelRows maps rows with topik and metode columns', () => {
@@ -60,4 +61,26 @@ test('buildSessionHistoryExcelRows maps rows with topik and metode columns', () 
   assert.equal(rows[0].I, 1);
   assert.equal(rows[0].A, 1);
   assert.equal(rows[0].Status, 'hadir');
+  assert.equal(rows[0]['Status Distribusi Tugas'], '-');
+  assert.equal(rows[0]['Waktu Distribusi'], '-');
+});
+
+test('resolveTaskDeliverySummary returns pending label when task exists but not delivered', () => {
+  const summary = resolveTaskDeliverySummary({
+    teacher_absence_task: [{ id: 10, delivered_by_picket: false, delivered_at: null }],
+  });
+
+  assert.equal(summary.taskId, 10);
+  assert.equal(summary.deliveryStatusLabel, 'Menunggu Distribusi');
+  assert.equal(summary.deliveryTimeLabel, '-');
+});
+
+test('resolveTaskDeliverySummary returns delivered label and time when task delivered', () => {
+  const summary = resolveTaskDeliverySummary({
+    teacher_absence_task: [{ id: 11, delivered_by_picket: true, delivered_at: '2026-04-03T01:00:00.000Z' }],
+  });
+
+  assert.equal(summary.taskId, 11);
+  assert.equal(summary.deliveryStatusLabel, 'Sudah Didistribusikan');
+  assert.match(summary.deliveryTimeLabel, /^\d{2}\.\d{2}$/);
 });
