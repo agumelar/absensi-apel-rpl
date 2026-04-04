@@ -7,6 +7,33 @@ const normalizeHeaderKey = (header) =>
     .replace(/\s+/g, '_')
     .replace(/[^a-z0-9_]/g, '');
 
+const formatHourMinuteWIB = (value) => {
+  if (!value) return '-';
+  const raw = String(value).trim();
+  if (!raw || raw === '-') return '-';
+
+  if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+  if (/^\d{2}\.\d{2}$/.test(raw)) return raw.replace('.', ':');
+  if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw.slice(0, 5);
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(parsed);
+
+  const map = {};
+  parts.forEach((part) => {
+    map[part.type] = part.value;
+  });
+
+  return `${map.hour || '00'}:${map.minute || '00'}`;
+};
+
 export const exportJsonToExcel = async ({ rows, sheetName, fileName }) => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName || 'Sheet1');
@@ -266,9 +293,9 @@ export const exportMapelSessionHistoryToExcel = async ({
       item.A ?? 0,
       item.Status ?? '-',
       item['Status Distribusi Tugas'] ?? '-',
-      item['Waktu Distribusi'] ?? '-',
-      item['Check-In'] ?? '-',
-      item['Check-Out'] ?? '-',
+      formatHourMinuteWIB(item['Waktu Distribusi']),
+      formatHourMinuteWIB(item['Check-In']),
+      formatHourMinuteWIB(item['Check-Out']),
     ]);
   });
 
@@ -288,7 +315,10 @@ export const exportTeacherPerformanceToExcel = async ({
   meta = {},
   summary = {},
   rows = [],
-  sheetName = 'Teacher Performance',
+  monitorRows = [],
+  historyRows = [],
+  absenceRows = [],
+  sheetName = 'Rekap_Bulanan',
   fileName = 'teacher-performance.xlsx',
 } = {}) => {
   const workbook = new ExcelJS.Workbook();
@@ -309,6 +339,7 @@ export const exportTeacherPerformanceToExcel = async ({
   worksheet.addRow(['', 'Presence Rate', `${summary.presenceRate || 0}%`]);
   worksheet.addRow(['', 'Late Rate', `${summary.lateRate || 0}%`]);
   worksheet.addRow(['', 'Tidak Masuk Rate', `${summary.tidakMasukRate || 0}%`]);
+  worksheet.addRow(['', 'Check-Out Completion Rate', `${summary.checkOutCompletionRate || 0}%`]);
   worksheet.addRow(['', 'SLA Breach Rate', `${summary.slaBreachRate || 0}%`]);
   worksheet.addRow(['', 'Kelas Terdampak', Number(summary.impactedClasses || 0)]);
   worksheet.addRow([]);
@@ -316,34 +347,115 @@ export const exportTeacherPerformanceToExcel = async ({
   const headerRow = worksheet.addRow([
     'No',
     'Guru',
-    'Kelas/Mapel Terakhir',
-    'Total Sesi',
-    'Hadir',
+    'Bulan',
+    'Total Sesi Terjadwal',
+    'Total Hadir',
+    'Total Terlambat',
     'Tidak Masuk',
-    'Pending',
-    'Telat',
+    'Total Tidak Check-Out',
     'Presence %',
     'Late %',
     'Tidak Masuk %',
+    'Check-Out Completion %',
+    'Kelas Terlibat',
+    'Mapel Terlibat',
   ]);
   headerRow.font = { bold: true };
 
   const safeRows = Array.isArray(rows) ? rows : [];
+  const bulanLabel = String(meta.bulanLabel || meta.periodeLabel || '-');
   safeRows.forEach((row, index) => {
+    const checkInCount = Number(row.check_in_sessions || 0);
+    const checkOutCount = Number(row.check_out_sessions || 0);
+    const tidakCheckOut = Math.max(0, checkInCount - checkOutCount);
     worksheet.addRow([
       index + 1,
       row.guru_nama || '-',
-      `${row.kelas_terakhir || '-'} / ${row.mapel_terakhir || '-'}`,
+      bulanLabel,
       Number(row.total_sessions || 0),
       Number(row.hadir_sessions || 0),
-      Number(row.tidak_masuk_sessions || 0),
-      Number(row.pending_sessions || 0),
       Number(row.telat_sessions || 0),
+      Number(row.tidak_masuk_sessions || 0),
+      tidakCheckOut,
       Number(row.presence_rate || 0),
       Number(row.late_rate || 0),
       Number(row.tidak_masuk_rate || 0),
+      Number(row.check_out_rate || 0),
+      row.kelas_terakhir || '-',
+      row.mapel_terakhir || '-',
     ]);
   });
+
+  const monitorSheet = workbook.addWorksheet('Monitor_Hari_Ini');
+  monitorSheet.addRow(['Tanggal', 'Jam', 'Guru', 'Kelas', 'Mapel', 'Status SLA', 'Check-In', 'Check-Out', 'Topik', 'Metode', 'H', 'S', 'I', 'A']);
+  monitorSheet.getRow(1).font = { bold: true };
+  (Array.isArray(monitorRows) ? monitorRows : []).forEach((item) => {
+    monitorSheet.addRow([
+      item.tanggal || '-',
+      item.jam_label || '-',
+      item.guru_nama || '-',
+      item.kelas_nama || '-',
+      item.mapel_nama || '-',
+      item.sla_label || '-',
+      formatHourMinuteWIB(item.waktu_check_in),
+      formatHourMinuteWIB(item.waktu_check_out),
+      item.agenda_topik || '-',
+      item.agenda_metode || '-',
+      Number(item.hadir || item.attendance_summary?.hadir || 0),
+      Number(item.sakit || item.attendance_summary?.sakit || 0),
+      Number(item.izin || item.attendance_summary?.izin || 0),
+      Number(item.alpha || item.attendance_summary?.alpha || 0),
+    ]);
+  });
+  if ((Array.isArray(monitorRows) ? monitorRows : []).length === 0) {
+    monitorSheet.addRow(['Belum ada data monitor untuk export ini']);
+  }
+
+  const historySheet = workbook.addWorksheet('Riwayat_Detail');
+  historySheet.addRow(['Tanggal', 'Guru', 'Kelas', 'Mapel', 'Status', 'Check-In', 'Check-Out', 'Topik', 'Metode']);
+  historySheet.getRow(1).font = { bold: true };
+  (Array.isArray(historyRows) ? historyRows : []).forEach((item) => {
+    historySheet.addRow([
+      item.tanggal || '-',
+      item.guru_nama || '-',
+      item.kelas_nama || '-',
+      item.mapel_nama || '-',
+      item.status || '-',
+      formatHourMinuteWIB(item.waktu_check_in),
+      formatHourMinuteWIB(item.waktu_check_out),
+      item.agenda_topik || '-',
+      item.agenda_metode || '-',
+    ]);
+  });
+  if ((Array.isArray(historyRows) ? historyRows : []).length === 0) {
+    historySheet.addRow(['Belum ada data riwayat untuk export ini']);
+  }
+
+  const absenceSheet = workbook.addWorksheet('Guru_Tidak_Masuk_Detail');
+  absenceSheet.addRow([
+    'Tanggal Tidak Masuk',
+    'Nama Guru',
+    'Kelas',
+    'Mapel',
+    'Instruksi Tugas',
+    'Delivered oleh Piket',
+    'Waktu Delivered',
+  ]);
+  absenceSheet.getRow(1).font = { bold: true };
+  (Array.isArray(absenceRows) ? absenceRows : []).forEach((item) => {
+    absenceSheet.addRow([
+      item.tanggal || '-',
+      item.guru_nama || '-',
+      item.kelas_nama || '-',
+      item.mapel_nama || '-',
+      item.instruksi || item.absence_task?.instruksi || '-',
+      item.delivered_by_picket ? 'Ya' : 'Tidak',
+      formatHourMinuteWIB(item.delivered_at),
+    ]);
+  });
+  if ((Array.isArray(absenceRows) ? absenceRows : []).length === 0) {
+    absenceSheet.addRow(['Belum ada data guru tidak masuk untuk export ini']);
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -411,8 +523,8 @@ export const exportMapelAuditSessionSummaryToExcel = async ({
       row.kelas_nama || '-',
       row.mapel_nama || '-',
       row.status || '-',
-      row.waktu_check_in || '-',
-      row.waktu_check_out || '-',
+      formatHourMinuteWIB(row.waktu_check_in),
+      formatHourMinuteWIB(row.waktu_check_out),
       Number(row.attendance_summary?.hadir || 0),
       Number(row.attendance_summary?.sakit || 0),
       Number(row.attendance_summary?.izin || 0),

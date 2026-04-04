@@ -2,416 +2,511 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import { Loader2 } from 'lucide-react';
 
-import { supabase } from '../../../supabaseClient';
-import { fetchMapelTeacherPerformance } from '../../../services/mapelService';
+import {
+  fetchExecutiveDailyMonitoring,
+  fetchMapelAuditFilterOptions,
+  fetchMapelAuditSessionSummary,
+  fetchMapelTeacherPerformance,
+} from '../../../services/mapelService';
 import { exportTeacherPerformanceToExcel } from '../../../services/shared/excelService';
 import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
 
+const TAB = {
+  MONITOR: 'monitor',
+  MONTHLY: 'monthly',
+};
+
+const toPeriodRangeForMonth = (monthValue) => {
+  const [year, month] = String(monthValue || '').split('-').map((value) => Number(value));
+  if (!year || !month) {
+    const today = getTodayDateWIB();
+    const [yy, mm] = today.split('-');
+    return {
+      fromDate: `${yy}-${mm}-01`,
+      toDate: today,
+      monthLabel: `${yy}-${mm}`,
+    };
+  }
+
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const fromDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const toDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return {
+    fromDate,
+    toDate,
+    monthLabel: `${year}-${String(month).padStart(2, '0')}`,
+  };
+};
+
+const formatSlaLabel = (item) => {
+  if (!item) return '-';
+  if (item.type === 'warning') return 'Breach';
+  if (item.type === 'on_window') return 'On Window';
+  if (item.type === 'checked_in') return 'Aman';
+  if (item.type === 'absent') return 'Tidak Masuk';
+  return '-';
+};
+
+const formatTimeToHourMinute = (value) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+};
+
 const TeacherPerformancePage = ({ user }) => {
-  const [loading, setLoading] = useState(false);
-  const [rangeDays, setRangeDays] = useState(7);
-  const [kelasId, setKelasId] = useState('all');
+  const [activeTab, setActiveTab] = useState(TAB.MONITOR);
+  const [loadingMonitor, setLoadingMonitor] = useState(false);
+  const [loadingMonthly, setLoadingMonthly] = useState(false);
+  const [monitorRows, setMonitorRows] = useState([]);
+  const [monthly, setMonthly] = useState({ summary: {}, rows: [] });
+  const [historyRows, setHistoryRows] = useState([]);
+  const [absenceRows, setAbsenceRows] = useState([]);
   const [kelasOptions, setKelasOptions] = useState([]);
-  const [performance, setPerformance] = useState({
-    summary: {
-      totalSessions: 0,
-      totalTeachers: 0,
-      totalCheckIns: 0,
-      totalCheckOuts: 0,
-      averagePresenceRate: 0,
-      averageLateRate: 0,
-    },
-    rows: [],
-    trendRows: [],
-    alertRows: [],
-    impactedRows: [],
-  });
-  const [trendBy, setTrendBy] = useState('guru_nama');
+
+  const todayDate = useMemo(() => getTodayDateWIB(), []);
+  const [historyFromDate, setHistoryFromDate] = useState(todayDate);
+  const [historyToDate, setHistoryToDate] = useState(todayDate);
+  const [selectedMonth, setSelectedMonth] = useState(todayDate.slice(0, 7));
+  const [guruKeyword, setGuruKeyword] = useState('');
+  const [kelasFilter, setKelasFilter] = useState('all');
 
   const userRole = String(user?.role || '').toLowerCase();
   const isKaprog = userRole === 'kaprog';
 
-  const loadKelasOptions = useCallback(async () => {
+  const loadMonitor = useCallback(async () => {
     try {
-      let kaprogJurusanId = Number.parseInt(user?.jurusan_id, 10);
-      if (isKaprog && (!Number.isInteger(kaprogJurusanId) || kaprogJurusanId <= 0)) {
-        const kaprogId = user?.walikelas_id || user?.id;
-        if (kaprogId) {
-          const { data: kaprogRow, error: kaprogError } = await supabase
-            .from('walikelas')
-            .select('jurusan_id')
-            .eq('id', kaprogId)
-            .maybeSingle();
-          if (kaprogError) throw kaprogError;
-          kaprogJurusanId = Number.parseInt(kaprogRow?.jurusan_id, 10);
-        }
-      }
+      setLoadingMonitor(true);
 
-      let kelasQuery = supabase.from('master_kelas').select('id, nama_kelas, jurusan_id').order('nama_kelas');
-      if (isKaprog && Number.isInteger(kaprogJurusanId) && kaprogJurusanId > 0) {
-        kelasQuery = kelasQuery.eq('jurusan_id', kaprogJurusanId);
-      }
+      const [snapshot, auditSummary] = await Promise.all([
+        fetchExecutiveDailyMonitoring({ tanggal: todayDate }),
+        fetchMapelAuditSessionSummary({
+          fromDate: todayDate,
+          toDate: todayDate,
+          page: 1,
+          pageSize: 200,
+        }),
+      ]);
 
-      const { data, error } = await kelasQuery;
-      if (error) throw error;
-      setKelasOptions(data || []);
-    } catch (error) {
-      Swal.fire('Gagal', error.message, 'error');
-    }
-  }, [isKaprog, user?.id, user?.jurusan_id, user?.walikelas_id]);
-
-  const loadPerformance = useCallback(async () => {
-    try {
-      setLoading(true);
-      const toDate = getTodayDateWIB();
-      const fromDateObj = new Date(`${toDate}T00:00:00+07:00`);
-      fromDateObj.setDate(fromDateObj.getDate() - Math.max(0, Number(rangeDays) - 1));
-      const fromDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Jakarta',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(fromDateObj);
-
-      const data = await fetchMapelTeacherPerformance({
-        fromDate,
-        toDate,
-        kelasId: kelasId === 'all' ? undefined : Number.parseInt(kelasId, 10),
-        trendBy,
-        limit: 400,
+      const auditMap = new Map((auditSummary.rows || []).map((item) => [String(item.schedule?.id || item.schedule_id || ''), item]));
+      const composed = (snapshot.rows || []).map((item) => {
+        const detail = auditMap.get(String(item.schedule_id || ''));
+        return {
+          ...item,
+          tanggal: todayDate,
+          sla_label: formatSlaLabel(item),
+          agenda_topik: detail?.agenda_topik || '-',
+          agenda_metode: detail?.agenda_metode || '-',
+          attendance_summary: detail?.attendance_summary || { hadir: 0, sakit: 0, izin: 0, alpha: 0 },
+          delivered_by_picket: Boolean(detail?.absence_task?.delivered_by_picket || item.delivered_by_picket),
+          delivered_at: detail?.absence_task?.delivered_at || '-',
+          instruksi: detail?.absence_task?.instruksi || '-',
+        };
       });
-      setPerformance(data);
+
+      setMonitorRows(composed);
     } catch (error) {
       Swal.fire('Gagal', error.message, 'error');
     } finally {
-      setLoading(false);
+      setLoadingMonitor(false);
     }
-  }, [kelasId, rangeDays, trendBy]);
+  }, [todayDate]);
 
-  const handleExport = async () => {
-    if (!performance.rows?.length) {
-      await Swal.fire('Tidak ada data', 'Belum ada data teacher performance untuk diexport.', 'info');
-      return;
+  const loadKelasOptions = useCallback(async () => {
+    try {
+      const options = await fetchMapelAuditFilterOptions();
+      setKelasOptions(options.kelasOptions || []);
+    } catch (error) {
+      Swal.fire('Gagal', error.message, 'error');
     }
+  }, []);
 
-    await exportTeacherPerformanceToExcel({
-      meta: {
-        periodeLabel: periodLabel,
-        roleScopeLabel: isKaprog ? 'Kaprog (Jurusan)' : 'Global Executive',
-        trendByLabel: trendBy === 'kelas_nama' ? 'Kelas' : trendBy === 'mapel_nama' ? 'Mapel' : 'Guru',
-      },
-      summary: {
-        presenceRate: performance.summary.averagePresenceRate,
-        lateRate: performance.summary.averageLateRate,
-        tidakMasukRate: performance.summary.tidakMasukRate,
-        slaBreachRate: performance.summary.slaBreachRate,
-        impactedClasses: performance.summary.impactedClasses,
-      },
-      rows: performance.rows,
-      fileName: `Teacher_Performance_${performance.summary?.fromDate || 'from'}_${performance.summary?.toDate || 'to'}.xlsx`,
-    });
-  };
+  const loadMonthly = useCallback(async () => {
+    try {
+      setLoadingMonthly(true);
+      const { fromDate, toDate } = toPeriodRangeForMonth(selectedMonth);
+      const requestedKelasId = kelasFilter !== 'all' ? Number(kelasFilter) : undefined;
+
+      const [performanceData, historyData] = await Promise.all([
+        fetchMapelTeacherPerformance({
+          fromDate,
+          toDate,
+          kelasId: requestedKelasId,
+          trendBy: 'guru_nama',
+          limit: 800,
+        }),
+        fetchMapelAuditSessionSummary({
+          fromDate: historyFromDate,
+          toDate: historyToDate,
+          kelasId: requestedKelasId,
+          page: 1,
+          pageSize: 300,
+        }),
+      ]);
+
+      const keyword = String(guruKeyword || '').trim().toLowerCase();
+      const filteredRows = (performanceData.rows || []).filter((item) => {
+        if (!keyword) return true;
+        return String(item.guru_nama || '').toLowerCase().includes(keyword);
+      });
+
+      const filteredHistory = (historyData.rows || []).filter((item) => {
+        if (!keyword) return true;
+        return String(item.guru_nama || '').toLowerCase().includes(keyword);
+      });
+
+      const absenceOnly = filteredHistory.filter((item) => String(item.status || '').toLowerCase().trim() === 'tidak masuk');
+
+      const totalCheckIns = filteredRows.reduce((sum, row) => sum + Number(row.check_in_sessions || 0), 0);
+      const totalCheckOuts = filteredRows.reduce((sum, row) => sum + Number(row.check_out_sessions || 0), 0);
+      const checkOutCompletionRate =
+        totalCheckIns > 0 ? Math.round((totalCheckOuts / totalCheckIns) * 1000) / 10 : 0;
+
+      setMonthly({
+        summary: {
+          ...performanceData.summary,
+          totalCheckIns,
+          totalCheckOuts,
+          checkOutCompletionRate,
+          fromDate,
+          toDate,
+        },
+        rows: filteredRows,
+      });
+      setHistoryRows(filteredHistory);
+      setAbsenceRows(
+        absenceOnly.map((item) => ({
+          ...item,
+          delivered_by_picket: Boolean(item.absence_task?.delivered_by_picket),
+          delivered_at: item.absence_task?.delivered_at || '-',
+          instruksi: item.absence_task?.instruksi || '-',
+        })),
+      );
+    } catch (error) {
+      Swal.fire('Gagal', error.message, 'error');
+    } finally {
+      setLoadingMonthly(false);
+    }
+  }, [guruKeyword, historyFromDate, historyToDate, kelasFilter, selectedMonth]);
 
   useEffect(() => {
     loadKelasOptions();
   }, [loadKelasOptions]);
 
   useEffect(() => {
-    loadPerformance();
-  }, [loadPerformance]);
+    loadMonitor();
+  }, [loadMonitor]);
+
+  useEffect(() => {
+    loadMonthly();
+  }, [loadMonthly]);
+
+  useEffect(() => {
+    setKelasFilter('all');
+  }, [selectedMonth]);
 
   const periodLabel = useMemo(() => {
-    const from = performance.summary?.fromDate || '-';
-    const to = performance.summary?.toDate || '-';
+    const from = monthly.summary?.fromDate || '-';
+    const to = monthly.summary?.toDate || '-';
     return `${from} s/d ${to}`;
-  }, [performance.summary?.fromDate, performance.summary?.toDate]);
+  }, [monthly.summary?.fromDate, monthly.summary?.toDate]);
 
-  const trendPreviewRows = useMemo(() => {
-    return (performance.trendRows || []).slice(-8).map((row) => {
-      const presenceRate = row.total > 0 ? Math.round((row.hadir / row.total) * 1000) / 10 : 0;
-      const lateRate = row.hadir > 0 ? Math.round((row.late / row.hadir) * 1000) / 10 : 0;
-      return {
-        ...row,
-        presenceRate,
-        lateRate,
-      };
+  const handleExport = async () => {
+    await exportTeacherPerformanceToExcel({
+      meta: {
+        periodeLabel: periodLabel,
+        bulanLabel: selectedMonth,
+        roleScopeLabel: isKaprog ? 'Kaprog (Jurusan)' : 'Global Executive',
+        trendByLabel: 'Guru',
+      },
+      summary: {
+        presenceRate: monthly.summary.averagePresenceRate,
+        lateRate: monthly.summary.averageLateRate,
+        tidakMasukRate: monthly.summary.tidakMasukRate,
+        checkOutCompletionRate: monthly.summary.checkOutCompletionRate,
+        slaBreachRate: monthly.summary.slaBreachRate,
+        impactedClasses: monthly.summary.impactedClasses,
+      },
+      rows: monthly.rows,
+      monitorRows,
+      historyRows,
+      absenceRows,
+      fileName: `Teacher_Performance_${selectedMonth}.xlsx`,
     });
-  }, [performance.trendRows]);
+  };
 
   return (
     <PageContainer className="space-y-5">
       <PageHeader className="block">
         <PageTitle className="text-2xl md:text-3xl">Teacher Performance</PageTitle>
         <PageSubtitle className="mt-2 normal-case tracking-wide text-slate-500">
-          Monitoring performa kehadiran guru mapel, check-in/out, tingkat keterlambatan (toleransi 15 menit), dan jumlah sesi mengajar.
+          Versi sederhana executive: monitor hari ini, rekap performa bulanan, riwayat tanggal, dan export Excel multi-sheet.
         </PageSubtitle>
       </PageHeader>
 
-      <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-5 md:grid-cols-6 md:p-6">
-          <label className="text-xs font-bold text-gray-600">
-            Kelas
-            <select
-              value={kelasId}
-              onChange={(event) => setKelasId(event.target.value)}
-              className="w-full mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
-            >
-              <option value="all">Semua Kelas</option>
-              {kelasOptions.map((kelas) => (
-                <option key={kelas.id} value={kelas.id}>
-                  {kelas.nama_kelas}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="md:col-span-3 space-y-2">
-            <p className="text-xs font-bold text-gray-600">Rentang Waktu</p>
-            <div className="flex flex-wrap gap-2">
-              {[7, 14, 30].map((days) => (
-                <button
-                  key={days}
-                  onClick={() => setRangeDays(days)}
-                  className={`rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wide ${
-                    rangeDays === days ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {days} Hari
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {[
-                { value: 'guru_nama', label: 'Tren Guru' },
-                { value: 'kelas_nama', label: 'Tren Kelas' },
-                { value: 'mapel_nama', label: 'Tren Mapel' },
-              ].map((item) => (
-                <button
-                  key={item.value}
-                  onClick={() => setTrendBy(item.value)}
-                  className={`rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wide ${
-                    trendBy === item.value ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={loadPerformance}
-              disabled={loading}
-              className="w-full rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-50"
-            >
-              {loading ? 'Memuat...' : 'Refresh'}
-            </button>
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleExport}
-              disabled={loading || performance.rows.length === 0}
-              className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-50"
-            >
-              Export Excel
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <p className="text-xs text-gray-500">
-        Periode data: <span className="font-semibold text-gray-700">{periodLabel}</span>
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2 text-[11px]">
-        <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">
-          Scope: {performance.summary.roleScope === 'jurusan' ? 'Jurusan (Kaprog)' : 'Global Executive'}
-        </span>
-        <span className="rounded-full bg-amber-50 px-3 py-1 font-bold text-amber-700">
-          Alert SLA: {performance.alertRows?.length || 0}
-        </span>
-        <span className="rounded-full bg-sky-50 px-3 py-1 font-bold text-sky-700">
-          Titik Tren: {performance.trendRows?.length || 0}
-        </span>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setActiveTab(TAB.MONITOR)}
+          className={`rounded-lg px-4 py-2 text-xs font-black uppercase tracking-wide ${
+            activeTab === TAB.MONITOR ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+          }`}
+        >
+          Monitor Hari Ini
+        </button>
+        <button
+          onClick={() => setActiveTab(TAB.MONTHLY)}
+          className={`rounded-lg px-4 py-2 text-xs font-black uppercase tracking-wide ${
+            activeTab === TAB.MONTHLY ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+          }`}
+        >
+          Rekap Bulanan + Riwayat
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Total Sesi</p>
-          <p className="text-2xl font-black text-slate-800">{performance.summary.totalSessions}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Total Guru</p>
-          <p className="text-2xl font-black text-slate-800">{performance.summary.totalTeachers}</p>
-        </div>
-        <div className="rounded-xl border border-green-100 bg-green-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Average Presence</p>
-          <p className="text-2xl font-black text-green-700">{performance.summary.averagePresenceRate}%</p>
-        </div>
-        <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Average Late</p>
-          <p className="text-2xl font-black text-amber-700">{performance.summary.averageLateRate}%</p>
-        </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Total Check-in</p>
-          <p className="text-2xl font-black text-blue-700">{performance.summary.totalCheckIns}</p>
-        </div>
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Total Check-out</p>
-          <p className="text-2xl font-black text-indigo-700">{performance.summary.totalCheckOuts}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Tidak Masuk Rate</p>
-          <p className="text-2xl font-black text-rose-700">{performance.summary.tidakMasukRate || 0}%</p>
-        </div>
-        <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-3">
-          <p className="text-xs text-slate-500">SLA Breach Rate</p>
-          <p className="text-2xl font-black text-orange-700">{performance.summary.slaBreachRate || 0}%</p>
-        </div>
-        <div className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-3">
-          <p className="text-xs text-slate-500">Kelas Terdampak</p>
-          <p className="text-2xl font-black text-sky-700">{performance.summary.impactedClasses || 0}</p>
-        </div>
-      </div>
-
-      {performance.alertRows?.length > 0 && (
+      {activeTab === TAB.MONITOR && (
         <Card>
-          <CardContent className="space-y-2 p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-amber-700">Alert Tindak Lanjut SLA</p>
-            {performance.alertRows.slice(0, 8).map((item) => (
-              <div key={item.session_id} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <p className="font-bold">
-                  {item.kelas_nama} • {item.mapel_nama}
-                </p>
-                <p>
-                  {item.guru_nama} • {item.warning_label}
-                </p>
+          <CardContent className="p-0">
+            {loadingMonitor && (
+              <div className="p-8 text-center">
+                <Loader2 className="mx-auto animate-spin text-blue-600" size={26} />
               </div>
-            ))}
+            )}
+            {!loadingMonitor && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1400px] text-xs">
+                  <thead className="bg-slate-50 text-[11px] uppercase text-slate-600">
+                    <tr>
+                      <th className="px-3 py-3 text-left">Tanggal</th>
+                      <th className="px-3 py-3 text-left">Jam</th>
+                      <th className="px-3 py-3 text-left">Guru</th>
+                      <th className="px-3 py-3 text-left">Kelas</th>
+                      <th className="px-3 py-3 text-left">Mapel</th>
+                      <th className="px-3 py-3 text-left">SLA</th>
+                      <th className="px-3 py-3 text-left">Check-In</th>
+                      <th className="px-3 py-3 text-left">Check-Out</th>
+                      <th className="px-3 py-3 text-left">Agenda</th>
+                      <th className="px-3 py-3 text-right">H</th>
+                      <th className="px-3 py-3 text-right">S</th>
+                      <th className="px-3 py-3 text-right">I</th>
+                      <th className="px-3 py-3 text-right">A</th>
+                      <th className="px-3 py-3 text-left">Tugas Saat Tidak Masuk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monitorRows.map((row) => (
+                      <tr key={`${row.schedule_id}-${row.session_id || 'n/a'}`} className="border-t border-slate-100">
+                        <td className="px-3 py-2">{row.tanggal || '-'}</td>
+                        <td className="px-3 py-2">{`${String(row.jam_mulai || '').slice(0, 5)}-${String(row.jam_selesai || '').slice(0, 5)}`}</td>
+                        <td className="px-3 py-2 font-semibold">{row.guru_nama}</td>
+                        <td className="px-3 py-2">{row.kelas_nama}</td>
+                        <td className="px-3 py-2">{row.mapel_nama}</td>
+                        <td className="px-3 py-2">{row.sla_label}</td>
+                        <td className="px-3 py-2">{formatTimeToHourMinute(row.waktu_check_in)}</td>
+                        <td className="px-3 py-2">{formatTimeToHourMinute(row.waktu_check_out)}</td>
+                        <td className="px-3 py-2">{`${row.agenda_topik || '-'} / ${row.agenda_metode || '-'}`}</td>
+                        <td className="px-3 py-2 text-right">{row.attendance_summary?.hadir || 0}</td>
+                        <td className="px-3 py-2 text-right">{row.attendance_summary?.sakit || 0}</td>
+                        <td className="px-3 py-2 text-right">{row.attendance_summary?.izin || 0}</td>
+                        <td className="px-3 py-2 text-right">{row.attendance_summary?.alpha || 0}</td>
+                        <td className="px-3 py-2">
+                          {String(row.session_status || '').toLowerCase() === 'tidak masuk'
+                            ? `${row.instruksi || '-'} • Delivered: ${row.delivered_by_picket ? 'Ya' : 'Tidak'}`
+                            : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                    {monitorRows.length === 0 && (
+                      <tr>
+                        <td colSpan={14} className="px-3 py-8 text-center text-slate-500">
+                          Tidak ada jadwal/sesi monitor hari ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-700">Preview Tren (8 titik terakhir)</p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-xs">
-                <thead className="bg-slate-50 text-[10px] uppercase text-slate-500">
-                  <tr>
-                    <th className="px-2 py-2 text-left">Tanggal</th>
-                    <th className="px-2 py-2 text-left">Dimensi</th>
-                    <th className="px-2 py-2 text-right">Total</th>
-                    <th className="px-2 py-2 text-right">Presence</th>
-                    <th className="px-2 py-2 text-right">Late</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trendPreviewRows.map((row) => (
-                    <tr key={`${row.tanggal}-${row.dimension}`} className="border-t border-slate-100">
-                      <td className="px-2 py-2">{row.tanggal}</td>
-                      <td className="px-2 py-2 font-semibold">{row.dimension}</td>
-                      <td className="px-2 py-2 text-right">{row.total}</td>
-                      <td className="px-2 py-2 text-right text-green-700">{row.presenceRate}%</td>
-                      <td className="px-2 py-2 text-right text-amber-700">{row.lateRate}%</td>
-                    </tr>
+      {activeTab === TAB.MONTHLY && (
+        <>
+          <Card>
+            <CardContent className="grid grid-cols-1 gap-3 p-5 md:grid-cols-6 md:p-6">
+              <label className="text-xs font-bold text-slate-600">
+                Bulan
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                />
+              </label>
+              <label className="text-xs font-bold text-slate-600">
+                Cari Nama Guru
+                <input
+                  value={guruKeyword}
+                  onChange={(event) => setGuruKeyword(event.target.value)}
+                  placeholder="contoh: budi"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                />
+              </label>
+              <label className="text-xs font-bold text-slate-600">
+                Kelas
+                <select
+                  value={kelasFilter}
+                  onChange={(event) => setKelasFilter(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                >
+                  <option value="all">Semua Kelas</option>
+                  {kelasOptions.map((kelas) => (
+                    <option key={kelas.id} value={kelas.id}>
+                      {kelas.nama_kelas}
+                    </option>
                   ))}
-                  {trendPreviewRows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-2 py-6 text-center text-slate-500">
-                        Belum ada data tren pada filter ini.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                </select>
+              </label>
+              <label className="text-xs font-bold text-slate-600">
+                Riwayat Dari
+                <input
+                  type="date"
+                  value={historyFromDate}
+                  onChange={(event) => setHistoryFromDate(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                />
+              </label>
+              <label className="text-xs font-bold text-slate-600">
+                Riwayat Sampai
+                <input
+                  type="date"
+                  value={historyToDate}
+                  onChange={(event) => setHistoryToDate(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <button
+                  onClick={loadMonthly}
+                  disabled={loadingMonthly}
+                  className="w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-black uppercase tracking-wide text-white disabled:opacity-50"
+                >
+                  {loadingMonthly ? 'Memuat...' : 'Refresh'}
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={loadingMonthly}
+                  className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black uppercase tracking-wide text-white disabled:opacity-50"
+                >
+                  Export
+                </button>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-700">Kelas Terdampak (harian)</p>
-            <div className="space-y-2">
-              {(performance.impactedRows || []).slice(-8).map((item) => (
-                <div key={item.tanggal} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                  <span className="font-semibold text-slate-700">{item.tanggal}</span>
-                  <span className="font-black text-sky-700">{item.impactedClasses} kelas</span>
-                </div>
-              ))}
-              {(performance.impactedRows || []).length === 0 && (
-                <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
-                  Tidak ada kelas terdampak pada periode ini.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <p className="text-xs text-slate-500">
+            Periode bulan: <span className="font-semibold text-slate-700">{periodLabel}</span>
+          </p>
 
-      <Card>
-        <CardContent className="p-0">
-          {loading && (
-            <div className="p-10 text-center">
-              <Loader2 className="mx-auto animate-spin text-blue-600" size={28} />
-            </div>
-          )}
-          {!loading && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                  <tr>
-                    <th className="px-3 py-3 text-left">Guru</th>
-                    <th className="px-3 py-3 text-left">Kelas / Mapel Terakhir</th>
-                    <th className="px-3 py-3 text-right">Total Sesi</th>
-                    <th className="px-3 py-3 text-right">Hadir</th>
-                    <th className="px-3 py-3 text-right">Check-in</th>
-                    <th className="px-3 py-3 text-right">Check-out</th>
-                    <th className="px-3 py-3 text-right">Tidak Masuk</th>
-                    <th className="px-3 py-3 text-right">Pending</th>
-                    <th className="px-3 py-3 text-right">Presence</th>
-                    <th className="px-3 py-3 text-right">Late Ratio</th>
-                    <th className="px-3 py-3 text-right">Check-out Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {performance.rows.map((row) => (
-                    <tr key={row.guru_id} className="border-t border-gray-100">
-                      <td className="px-3 py-3 font-semibold">{row.guru_nama}</td>
-                      <td className="px-3 py-3 text-gray-600">
-                        {row.kelas_terakhir} • {row.mapel_terakhir}
-                      </td>
-                      <td className="px-3 py-3 text-right font-bold">{row.total_sessions}</td>
-                      <td className="px-3 py-3 text-right font-bold text-green-700">{row.hadir_sessions}</td>
-                      <td className="px-3 py-3 text-right font-bold text-blue-700">{row.check_in_sessions}</td>
-                      <td className="px-3 py-3 text-right font-bold text-indigo-700">{row.check_out_sessions}</td>
-                      <td className="px-3 py-3 text-right font-bold text-amber-700">{row.tidak_masuk_sessions}</td>
-                      <td className="px-3 py-3 text-right font-bold text-slate-600">{row.pending_sessions}</td>
-                      <td className="px-3 py-3 text-right font-bold text-green-700">{row.presence_rate}%</td>
-                      <td className="px-3 py-3 text-right font-bold text-amber-700">{row.late_rate}%</td>
-                      <td className="px-3 py-3 text-right font-bold text-indigo-700">
-                        {row.check_out_rate === null ? '-' : `${row.check_out_rate}%`}
-                      </td>
-                    </tr>
-                  ))}
-                  {performance.rows.length === 0 && (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1200px] text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                     <tr>
-                      <td colSpan={11} className="px-3 py-8 text-center text-sm text-gray-500">
-                        Belum ada data teacher performance pada rentang/filter ini.
-                      </td>
+                      <th className="px-3 py-3 text-left">Guru</th>
+                      <th className="px-3 py-3 text-right">Total Sesi</th>
+                      <th className="px-3 py-3 text-right">Hadir</th>
+                      <th className="px-3 py-3 text-right">Terlambat</th>
+                      <th className="px-3 py-3 text-right">Tidak Masuk</th>
+                      <th className="px-3 py-3 text-right">Tidak Check-Out</th>
+                      <th className="px-3 py-3 text-right">Presence</th>
+                      <th className="px-3 py-3 text-right">Late</th>
+                      <th className="px-3 py-3 text-right">Check-Out Rate</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </thead>
+                  <tbody>
+                    {monthly.rows.map((row) => {
+                      const tidakCheckOut = Math.max(0, Number(row.check_in_sessions || 0) - Number(row.check_out_sessions || 0));
+                      return (
+                        <tr key={row.guru_id} className="border-t border-slate-100">
+                          <td className="px-3 py-2 font-semibold">{row.guru_nama}</td>
+                          <td className="px-3 py-2 text-right">{row.total_sessions}</td>
+                          <td className="px-3 py-2 text-right text-green-700 font-bold">{row.hadir_sessions}</td>
+                          <td className="px-3 py-2 text-right text-amber-700 font-bold">{row.telat_sessions}</td>
+                          <td className="px-3 py-2 text-right text-rose-700 font-bold">{row.tidak_masuk_sessions}</td>
+                          <td className="px-3 py-2 text-right text-orange-700 font-bold">{tidakCheckOut}</td>
+                          <td className="px-3 py-2 text-right">{row.presence_rate}%</td>
+                          <td className="px-3 py-2 text-right">{row.late_rate}%</td>
+                          <td className="px-3 py-2 text-right">{row.check_out_rate === null ? '-' : `${row.check_out_rate}%`}</td>
+                        </tr>
+                      );
+                    })}
+                    {monthly.rows.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                          Belum ada data rekap bulanan untuk filter ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-700">Riwayat Detail (Filter Tanggal)</p>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[1100px] text-xs">
+                  <thead className="bg-slate-50 text-[11px] uppercase text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Tanggal</th>
+                      <th className="px-3 py-2 text-left">Guru</th>
+                      <th className="px-3 py-2 text-left">Kelas</th>
+                      <th className="px-3 py-2 text-left">Mapel</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Check-In</th>
+                      <th className="px-3 py-2 text-left">Check-Out</th>
+                      <th className="px-3 py-2 text-left">Agenda</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRows.map((row) => (
+                      <tr key={row.id} className="border-t border-slate-100">
+                        <td className="px-3 py-2">{row.tanggal || '-'}</td>
+                        <td className="px-3 py-2">{row.guru_nama || '-'}</td>
+                        <td className="px-3 py-2">{row.kelas_nama || '-'}</td>
+                        <td className="px-3 py-2">{row.mapel_nama || '-'}</td>
+                        <td className="px-3 py-2">{row.status || '-'}</td>
+                        <td className="px-3 py-2">{formatTimeToHourMinute(row.waktu_check_in)}</td>
+                        <td className="px-3 py-2">{formatTimeToHourMinute(row.waktu_check_out)}</td>
+                        <td className="px-3 py-2">{`${row.agenda_topik || '-'} / ${row.agenda_metode || '-'}`}</td>
+                      </tr>
+                    ))}
+                    {historyRows.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                          Tidak ada riwayat pada rentang tanggal ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </PageContainer>
   );
 };

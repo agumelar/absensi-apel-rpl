@@ -17,6 +17,7 @@ import {
   buildMonthRangeByOffset,
   buildSessionHistoryExcelRows,
   resolveTaskDeliverySummary,
+  toLocalTimeLabel,
 } from '../utils/sessionHistoryRules';
 
 const getToday = () => getTodayDateWIB();
@@ -311,10 +312,10 @@ const MapelSessionHistoryPage = ({ user }) => {
                       </td>
                       <td className="px-3 py-2">{taskDelivery.deliveryTimeLabel}</td>
                       <td className="px-3 py-2">
-                        {row.waktu_check_in ? new Date(row.waktu_check_in).toLocaleTimeString('id-ID') : '-'}
+                        {toLocalTimeLabel(row.waktu_check_in)}
                       </td>
                       <td className="px-3 py-2">
-                        {row.waktu_check_out ? new Date(row.waktu_check_out).toLocaleTimeString('id-ID') : '-'}
+                        {toLocalTimeLabel(row.waktu_check_out)}
                       </td>
                       <td className="px-3 py-2">
                         <Button variant="secondary" size="sm" onClick={() => openDetail(row)} disabled={detailLoading}>

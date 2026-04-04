@@ -25,7 +25,7 @@ test('buildMonthRangeByOffset supports previous month', () => {
 test('toLocalTimeLabel converts ISO string into readable time', () => {
   const label = toLocalTimeLabel('2026-04-02T01:10:00.000Z');
 
-  assert.match(label, /^\d{2}\.\d{2}$/);
+  assert.match(label, /^\d{2}:\d{2}$/);
 });
 
 test('buildSessionHistoryExcelRows maps rows with topik and metode columns', () => {
@@ -82,5 +82,5 @@ test('resolveTaskDeliverySummary returns delivered label and time when task deli
 
   assert.equal(summary.taskId, 11);
   assert.equal(summary.deliveryStatusLabel, 'Sudah Didistribusikan');
-  assert.match(summary.deliveryTimeLabel, /^\d{2}\.\d{2}$/);
+  assert.match(summary.deliveryTimeLabel, /^\d{2}:\d{2}$/);
 });

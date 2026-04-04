@@ -43,10 +43,13 @@ export const toLocalTimeLabel = (isoDateTime) => {
   if (Number.isNaN(date.getTime())) return '-';
 
   return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  }).format(date);
+  })
+    .format(date)
+    .replace('.', ':');
 };
 
 const resolveAgenda = (row) => {

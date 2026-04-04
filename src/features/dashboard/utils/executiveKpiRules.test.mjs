@@ -59,3 +59,16 @@ test('buildTrendBuckets groups by day and dimension', () => {
   assert.equal(rows[0].tidakMasuk, 1);
   assert.equal(rows[0].late, 1);
 });
+
+test('buildTrendBuckets changes grouping when dimension changes', () => {
+  const sampleRows = [
+    { tanggal: '2026-04-04', guru_nama: 'Guru A', kelas_nama: 'X RPL 1', mapel_nama: 'RPL', statusNorm: 'hadir', isLate: false },
+    { tanggal: '2026-04-04', guru_nama: 'Guru A', kelas_nama: 'X RPL 2', mapel_nama: 'RPL', statusNorm: 'hadir', isLate: true },
+  ];
+
+  const byGuru = buildTrendBuckets(sampleRows, 'guru_nama');
+  const byKelas = buildTrendBuckets(sampleRows, 'kelas_nama');
+
+  assert.equal(byGuru.length, 1);
+  assert.equal(byKelas.length, 2);
+});

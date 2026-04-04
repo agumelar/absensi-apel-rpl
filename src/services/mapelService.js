@@ -1174,24 +1174,7 @@ export const fetchTeacherAbsenceTaskBySession = async (sessionId) => {
   return data;
 };
 
-export const fetchGuruKosongEws = async ({ tanggal, kelasId } = {}) => {
-  assertPiketAccessOrThrow();
-  const targetDate = tanggal || getTodayDateWIB();
-  const targetDay = getDayNameWIB(targetDate);
-  const nowMinutes = targetDate === getTodayDateWIB() ? getWibMinutesNow() : 24 * 60;
-
-  let scheduleQuery = supabase
-    .from('schedule')
-    .select('id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel)')
-    .eq('hari', targetDay)
-    .order('jam_mulai', { ascending: true });
-
-  if (kelasId) {
-    scheduleQuery = scheduleQuery.eq('kelas_id', Number(kelasId));
-  }
-
-  const { data: schedules, error: scheduleError } = await scheduleQuery;
-  if (scheduleError) throw scheduleError;
+const buildDailySlaMonitoringRows = async ({ schedules, targetDate, nowMinutes }) => {
   if (!schedules?.length) {
     return {
       summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
@@ -1316,6 +1299,7 @@ export const fetchGuruKosongEws = async ({ tanggal, kelasId } = {}) => {
       task_id: item.task?.id ?? null,
       session_status: item.session?.status ?? 'Belum Check-In',
       waktu_check_in: item.session?.waktu_check_in ?? null,
+      waktu_check_out: item.session?.waktu_check_out ?? null,
     }))
     .sort((a, b) => {
       const rank = { warning: 0, absent: 1, on_window: 2, checked_in: 3 };
@@ -1337,6 +1321,76 @@ export const fetchGuruKosongEws = async ({ tanggal, kelasId } = {}) => {
   );
 
   return { summary, rows };
+};
+
+export const fetchGuruKosongEws = async ({ tanggal, kelasId } = {}) => {
+  assertPiketAccessOrThrow();
+  const targetDate = tanggal || getTodayDateWIB();
+  const targetDay = getDayNameWIB(targetDate);
+  const nowMinutes = targetDate === getTodayDateWIB() ? getWibMinutesNow() : 24 * 60;
+
+  let scheduleQuery = supabase
+    .from('schedule')
+    .select('id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel)')
+    .eq('hari', targetDay)
+    .order('jam_mulai', { ascending: true });
+
+  if (kelasId) {
+    scheduleQuery = scheduleQuery.eq('kelas_id', Number(kelasId));
+  }
+
+  const { data: schedules, error: scheduleError } = await scheduleQuery;
+  if (scheduleError) throw scheduleError;
+
+  return buildDailySlaMonitoringRows({ schedules, targetDate, nowMinutes });
+};
+
+export const fetchExecutiveDailyMonitoring = async ({ tanggal, kelasId } = {}) => {
+  const scope = await resolveExecutiveScopeOrThrow();
+  const targetDate = tanggal || getTodayDateWIB();
+  const targetDay = getDayNameWIB(targetDate);
+  const nowMinutes = targetDate === getTodayDateWIB() ? getWibMinutesNow() : 24 * 60;
+
+  let allowedKelasIds = null;
+  if (scope.isJurusanScoped) {
+    const { data: kelasRows, error: kelasError } = await supabase
+      .from('master_kelas')
+      .select('id')
+      .eq('jurusan_id', scope.jurusanId);
+    if (kelasError) throw kelasError;
+    allowedKelasIds = (kelasRows || []).map((item) => Number(item.id)).filter((id) => Number.isInteger(id));
+    if (allowedKelasIds.length === 0) {
+      return {
+        summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
+        rows: [],
+      };
+    }
+  }
+
+  const requestedKelasId = kelasId ? Number(kelasId) : null;
+  if (requestedKelasId && allowedKelasIds && !allowedKelasIds.includes(requestedKelasId)) {
+    return {
+      summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
+      rows: [],
+    };
+  }
+
+  let scheduleQuery = supabase
+    .from('schedule')
+    .select('id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel)')
+    .eq('hari', targetDay)
+    .order('jam_mulai', { ascending: true });
+
+  if (requestedKelasId) {
+    scheduleQuery = scheduleQuery.eq('kelas_id', requestedKelasId);
+  } else if (allowedKelasIds) {
+    scheduleQuery = scheduleQuery.in('kelas_id', allowedKelasIds);
+  }
+
+  const { data: schedules, error: scheduleError } = await scheduleQuery;
+  if (scheduleError) throw scheduleError;
+
+  return buildDailySlaMonitoringRows({ schedules, targetDate, nowMinutes });
 };
 
 export const fetchExecutiveMapelKpiDataset = async ({
@@ -1726,13 +1780,13 @@ export const fetchTeacherAbsenceTasksForPicket = async ({ tanggal, kelasId, deli
   return { rows };
 };
 
-export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, limit = 200 } = {}) => {
+export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, trendBy, limit = 200 } = {}) => {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 1000) : 200;
   const dataset = await fetchExecutiveMapelKpiDataset({
     fromDate,
     toDate,
     kelasId,
-    trendBy: 'guru_nama',
+    trendBy,
   });
 
   const limitedRows = (dataset.teacherRows || []).slice(0, safeLimit);
