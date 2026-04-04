@@ -284,6 +284,156 @@ export const exportMapelSessionHistoryToExcel = async ({
   URL.revokeObjectURL(url);
 };
 
+export const exportTeacherPerformanceToExcel = async ({
+  meta = {},
+  summary = {},
+  rows = [],
+  sheetName = 'Teacher Performance',
+  fileName = 'teacher-performance.xlsx',
+} = {}) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  const metadataRows = [
+    ['Periode', String(meta.periodeLabel || '-')],
+    ['Scope', String(meta.roleScopeLabel || '-')],
+    ['Trend By', String(meta.trendByLabel || '-')],
+  ];
+
+  metadataRows.forEach(([label, value]) => {
+    const row = worksheet.addRow(['', label, value]);
+    row.getCell(2).font = { bold: true };
+  });
+
+  worksheet.addRow([]);
+  worksheet.addRow(['', 'Presence Rate', `${summary.presenceRate || 0}%`]);
+  worksheet.addRow(['', 'Late Rate', `${summary.lateRate || 0}%`]);
+  worksheet.addRow(['', 'Tidak Masuk Rate', `${summary.tidakMasukRate || 0}%`]);
+  worksheet.addRow(['', 'SLA Breach Rate', `${summary.slaBreachRate || 0}%`]);
+  worksheet.addRow(['', 'Kelas Terdampak', Number(summary.impactedClasses || 0)]);
+  worksheet.addRow([]);
+
+  const headerRow = worksheet.addRow([
+    'No',
+    'Guru',
+    'Kelas/Mapel Terakhir',
+    'Total Sesi',
+    'Hadir',
+    'Tidak Masuk',
+    'Pending',
+    'Telat',
+    'Presence %',
+    'Late %',
+    'Tidak Masuk %',
+  ]);
+  headerRow.font = { bold: true };
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+  safeRows.forEach((row, index) => {
+    worksheet.addRow([
+      index + 1,
+      row.guru_nama || '-',
+      `${row.kelas_terakhir || '-'} / ${row.mapel_terakhir || '-'}`,
+      Number(row.total_sessions || 0),
+      Number(row.hadir_sessions || 0),
+      Number(row.tidak_masuk_sessions || 0),
+      Number(row.pending_sessions || 0),
+      Number(row.telat_sessions || 0),
+      Number(row.presence_rate || 0),
+      Number(row.late_rate || 0),
+      Number(row.tidak_masuk_rate || 0),
+    ]);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+export const exportMapelAuditSessionSummaryToExcel = async ({
+  meta = {},
+  summary = {},
+  rows = [],
+  sheetName = 'Audit Mapel Session Summary',
+  fileName = 'audit-mapel-session-summary.xlsx',
+} = {}) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  const metadataRows = [
+    ['Periode', String(meta.periodeLabel || '-')],
+    ['Kelas', String(meta.kelasLabel || 'Semua Kelas')],
+    ['Mapel', String(meta.mapelLabel || 'Semua Mapel')],
+    ['Presence Rate', `${summary?.presenceRate || 0}%`],
+    ['Late Rate', `${summary?.lateRate || 0}%`],
+    ['Tidak Masuk Rate', `${summary?.tidakMasukRate || 0}%`],
+    ['SLA Breach Rate', `${summary?.slaBreachRate || 0}%`],
+  ];
+
+  metadataRows.forEach(([label, value]) => {
+    const row = worksheet.addRow(['', label, value]);
+    row.getCell(2).font = { bold: true };
+  });
+
+  worksheet.addRow([]);
+
+  const headerRow = worksheet.addRow([
+    'No',
+    'Tanggal',
+    'Guru',
+    'Kelas',
+    'Mapel',
+    'Status',
+    'Check-In',
+    'Check-Out',
+    'H',
+    'S',
+    'I',
+    'A',
+    'Topik',
+    'Metode',
+  ]);
+  headerRow.font = { bold: true };
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+  safeRows.forEach((row, index) => {
+    worksheet.addRow([
+      index + 1,
+      row.tanggal || '-',
+      row.guru_nama || '-',
+      row.kelas_nama || '-',
+      row.mapel_nama || '-',
+      row.status || '-',
+      row.waktu_check_in || '-',
+      row.waktu_check_out || '-',
+      Number(row.attendance_summary?.hadir || 0),
+      Number(row.attendance_summary?.sakit || 0),
+      Number(row.attendance_summary?.izin || 0),
+      Number(row.attendance_summary?.alpha || 0),
+      row.agenda_topik || '-',
+      row.agenda_metode || '-',
+    ]);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const readExcelFileToJson = async (file) => {
   if (!file) return [];
 

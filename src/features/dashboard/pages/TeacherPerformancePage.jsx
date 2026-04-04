@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 import { supabase } from '../../../supabaseClient';
 import { fetchMapelTeacherPerformance } from '../../../services/mapelService';
+import { exportTeacherPerformanceToExcel } from '../../../services/shared/excelService';
 import { getTodayDateWIB } from '../../../services/shared/dateService';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -23,7 +24,11 @@ const TeacherPerformancePage = ({ user }) => {
       averageLateRate: 0,
     },
     rows: [],
+    trendRows: [],
+    alertRows: [],
+    impactedRows: [],
   });
+  const [trendBy, setTrendBy] = useState('guru_nama');
 
   const userRole = String(user?.role || '').toLowerCase();
   const isKaprog = userRole === 'kaprog';
@@ -74,6 +79,7 @@ const TeacherPerformancePage = ({ user }) => {
         fromDate,
         toDate,
         kelasId: kelasId === 'all' ? undefined : Number.parseInt(kelasId, 10),
+        trendBy,
         limit: 400,
       });
       setPerformance(data);
@@ -82,7 +88,31 @@ const TeacherPerformancePage = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  }, [kelasId, rangeDays]);
+  }, [kelasId, rangeDays, trendBy]);
+
+  const handleExport = async () => {
+    if (!performance.rows?.length) {
+      await Swal.fire('Tidak ada data', 'Belum ada data teacher performance untuk diexport.', 'info');
+      return;
+    }
+
+    await exportTeacherPerformanceToExcel({
+      meta: {
+        periodeLabel: periodLabel,
+        roleScopeLabel: isKaprog ? 'Kaprog (Jurusan)' : 'Global Executive',
+        trendByLabel: trendBy === 'kelas_nama' ? 'Kelas' : trendBy === 'mapel_nama' ? 'Mapel' : 'Guru',
+      },
+      summary: {
+        presenceRate: performance.summary.averagePresenceRate,
+        lateRate: performance.summary.averageLateRate,
+        tidakMasukRate: performance.summary.tidakMasukRate,
+        slaBreachRate: performance.summary.slaBreachRate,
+        impactedClasses: performance.summary.impactedClasses,
+      },
+      rows: performance.rows,
+      fileName: `Teacher_Performance_${performance.summary?.fromDate || 'from'}_${performance.summary?.toDate || 'to'}.xlsx`,
+    });
+  };
 
   useEffect(() => {
     loadKelasOptions();
@@ -98,6 +128,18 @@ const TeacherPerformancePage = ({ user }) => {
     return `${from} s/d ${to}`;
   }, [performance.summary?.fromDate, performance.summary?.toDate]);
 
+  const trendPreviewRows = useMemo(() => {
+    return (performance.trendRows || []).slice(-8).map((row) => {
+      const presenceRate = row.total > 0 ? Math.round((row.hadir / row.total) * 1000) / 10 : 0;
+      const lateRate = row.hadir > 0 ? Math.round((row.late / row.hadir) * 1000) / 10 : 0;
+      return {
+        ...row,
+        presenceRate,
+        lateRate,
+      };
+    });
+  }, [performance.trendRows]);
+
   return (
     <PageContainer className="space-y-5">
       <PageHeader className="block">
@@ -108,7 +150,7 @@ const TeacherPerformancePage = ({ user }) => {
       </PageHeader>
 
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-5 md:grid-cols-5 md:p-6">
+        <CardContent className="grid grid-cols-1 gap-3 p-5 md:grid-cols-6 md:p-6">
           <label className="text-xs font-bold text-gray-600">
             Kelas
             <select
@@ -139,6 +181,23 @@ const TeacherPerformancePage = ({ user }) => {
                 </button>
               ))}
             </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {[
+                { value: 'guru_nama', label: 'Tren Guru' },
+                { value: 'kelas_nama', label: 'Tren Kelas' },
+                { value: 'mapel_nama', label: 'Tren Mapel' },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  onClick={() => setTrendBy(item.value)}
+                  className={`rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wide ${
+                    trendBy === item.value ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-end">
             <button
@@ -149,12 +208,33 @@ const TeacherPerformancePage = ({ user }) => {
               {loading ? 'Memuat...' : 'Refresh'}
             </button>
           </div>
+          <div className="flex items-end">
+            <button
+              onClick={handleExport}
+              disabled={loading || performance.rows.length === 0}
+              className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-50"
+            >
+              Export Excel
+            </button>
+          </div>
         </CardContent>
       </Card>
 
       <p className="text-xs text-gray-500">
         Periode data: <span className="font-semibold text-gray-700">{periodLabel}</span>
       </p>
+
+      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+        <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">
+          Scope: {performance.summary.roleScope === 'jurusan' ? 'Jurusan (Kaprog)' : 'Global Executive'}
+        </span>
+        <span className="rounded-full bg-amber-50 px-3 py-1 font-bold text-amber-700">
+          Alert SLA: {performance.alertRows?.length || 0}
+        </span>
+        <span className="rounded-full bg-sky-50 px-3 py-1 font-bold text-sky-700">
+          Titik Tren: {performance.trendRows?.length || 0}
+        </span>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
@@ -181,6 +261,97 @@ const TeacherPerformancePage = ({ user }) => {
           <p className="text-xs text-slate-500">Total Check-out</p>
           <p className="text-2xl font-black text-indigo-700">{performance.summary.totalCheckOuts}</p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-3">
+          <p className="text-xs text-slate-500">Tidak Masuk Rate</p>
+          <p className="text-2xl font-black text-rose-700">{performance.summary.tidakMasukRate || 0}%</p>
+        </div>
+        <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-3">
+          <p className="text-xs text-slate-500">SLA Breach Rate</p>
+          <p className="text-2xl font-black text-orange-700">{performance.summary.slaBreachRate || 0}%</p>
+        </div>
+        <div className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-3">
+          <p className="text-xs text-slate-500">Kelas Terdampak</p>
+          <p className="text-2xl font-black text-sky-700">{performance.summary.impactedClasses || 0}</p>
+        </div>
+      </div>
+
+      {performance.alertRows?.length > 0 && (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-amber-700">Alert Tindak Lanjut SLA</p>
+            {performance.alertRows.slice(0, 8).map((item) => (
+              <div key={item.session_id} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <p className="font-bold">
+                  {item.kelas_nama} • {item.mapel_nama}
+                </p>
+                <p>
+                  {item.guru_nama} • {item.warning_label}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-700">Preview Tren (8 titik terakhir)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-xs">
+                <thead className="bg-slate-50 text-[10px] uppercase text-slate-500">
+                  <tr>
+                    <th className="px-2 py-2 text-left">Tanggal</th>
+                    <th className="px-2 py-2 text-left">Dimensi</th>
+                    <th className="px-2 py-2 text-right">Total</th>
+                    <th className="px-2 py-2 text-right">Presence</th>
+                    <th className="px-2 py-2 text-right">Late</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trendPreviewRows.map((row) => (
+                    <tr key={`${row.tanggal}-${row.dimension}`} className="border-t border-slate-100">
+                      <td className="px-2 py-2">{row.tanggal}</td>
+                      <td className="px-2 py-2 font-semibold">{row.dimension}</td>
+                      <td className="px-2 py-2 text-right">{row.total}</td>
+                      <td className="px-2 py-2 text-right text-green-700">{row.presenceRate}%</td>
+                      <td className="px-2 py-2 text-right text-amber-700">{row.lateRate}%</td>
+                    </tr>
+                  ))}
+                  {trendPreviewRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-2 py-6 text-center text-slate-500">
+                        Belum ada data tren pada filter ini.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-700">Kelas Terdampak (harian)</p>
+            <div className="space-y-2">
+              {(performance.impactedRows || []).slice(-8).map((item) => (
+                <div key={item.tanggal} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+                  <span className="font-semibold text-slate-700">{item.tanggal}</span>
+                  <span className="font-black text-sky-700">{item.impactedClasses} kelas</span>
+                </div>
+              ))}
+              {(performance.impactedRows || []).length === 0 && (
+                <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
+                  Tidak ada kelas terdampak pada periode ini.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>

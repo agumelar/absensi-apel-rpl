@@ -1,8 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 
-import { fetchMapelAuditFilterOptions, fetchMapelAuditSessionSummary } from '../../../services/mapelService';
-import { exportJsonToExcel } from '../../../services/shared/excelService';
+import {
+  fetchExecutiveMapelKpiDataset,
+  fetchMapelAuditFilterOptions,
+  fetchMapelAuditSessionSummary,
+} from '../../../services/mapelService';
+import { exportMapelAuditSessionSummaryToExcel } from '../../../services/shared/excelService';
 import { formatDateToWIB, getTodayDateWIB } from '../../../services/shared/dateService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
@@ -46,6 +50,7 @@ const MapelAuditTrailPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalRows, setTotalRows] = useState(0);
+  const [kpiContext, setKpiContext] = useState(null);
   const [filters, setFilters] = useState({
     fromDate: getToday(),
     toDate: getToday(),
@@ -76,6 +81,15 @@ const MapelAuditTrailPage = () => {
       });
       setRows(data.rows || []);
       setTotalRows(data.total || 0);
+
+      const kpiData = await fetchExecutiveMapelKpiDataset({
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
+        kelasId: filters.kelasId !== 'all' ? Number(filters.kelasId) : undefined,
+        mapelId: filters.mapelId !== 'all' ? Number(filters.mapelId) : undefined,
+        trendBy: 'kelas_nama',
+      });
+      setKpiContext(kpiData.summary || null);
     } catch (error) {
       Swal.fire('Gagal', error.message, 'error');
     } finally {
@@ -150,33 +164,25 @@ const MapelAuditTrailPage = () => {
         exportRows = exportRows.concat(nextPageData.rows || []);
       }
 
-      const excelRows = exportRows.map((row) => ({
-        Tanggal: row.tanggal || '-',
-        Status: humanizeSessionStatus(row.status),
-        Guru: row.guru_nama || '-',
-        Kelas: row.kelas_nama || '-',
-        Mapel: row.mapel_nama || '-',
-        Jam: row.jam_label || '-',
-        'Check-In': formatDateTimeLabel(row.waktu_check_in),
-        'Bukti Check-In': row.foto_check_in || '-',
-        'Check-Out': formatDateTimeLabel(row.waktu_check_out),
-        'Bukti Check-Out': row.foto_check_out || '-',
-        'Siswa Hadir': row.attendance_summary?.hadir || 0,
-        'Siswa Sakit': row.attendance_summary?.sakit || 0,
-        'Siswa Izin': row.attendance_summary?.izin || 0,
-        'Siswa Alpha': row.attendance_summary?.alpha || 0,
-        'Topik Agenda': row.agenda_topik || '-',
-        'Metode Agenda': row.agenda_metode || '-',
-        'Alasan / Instruksi Tidak Masuk': row.absence_task?.instruksi || '-',
-        'Lampiran Tugas': row.absence_task?.file_path || '-',
-      }));
+      const selectedKelasLabel =
+        filters.kelasId === 'all' ? 'Semua Kelas' : kelasOptions.find((item) => String(item.id) === String(filters.kelasId))?.nama_kelas || '-';
+      const selectedMapelLabel =
+        filters.mapelId === 'all' ? 'Semua Mapel' : mapelOptions.find((item) => String(item.id) === String(filters.mapelId))?.nama_mapel || '-';
 
-      const fromLabel = filters.fromDate || 'all';
-      const toLabel = filters.toDate || 'all';
-      await exportJsonToExcel({
-        rows: excelRows,
-        sheetName: 'Audit Mapel',
-        fileName: `Audit_Mapel_${fromLabel}_${toLabel}.xlsx`,
+      await exportMapelAuditSessionSummaryToExcel({
+        meta: {
+          periodeLabel: `${filters.fromDate || '-'} s/d ${filters.toDate || '-'}`,
+          kelasLabel: selectedKelasLabel,
+          mapelLabel: selectedMapelLabel,
+        },
+        summary: {
+          presenceRate: kpiContext?.presenceRate || 0,
+          lateRate: kpiContext?.lateRate || 0,
+          tidakMasukRate: kpiContext?.tidakMasukRate || 0,
+          slaBreachRate: kpiContext?.slaBreachRate || 0,
+        },
+        rows: exportRows,
+        fileName: `Audit_Mapel_${filters.fromDate || 'all'}_${filters.toDate || 'all'}.xlsx`,
       });
     } catch (error) {
       Swal.fire('Gagal export', error.message, 'error');
@@ -317,6 +323,49 @@ const MapelAuditTrailPage = () => {
         <div className="rounded-lg bg-orange-50 px-3 py-2 font-bold text-orange-700">Siswa Sakit/Izin: {summary.siswaSakit + summary.siswaIzin}</div>
         <div className="rounded-lg bg-red-50 px-3 py-2 font-bold text-red-700">Siswa Alpha: {summary.siswaAlpha}</div>
       </div>
+
+      {kpiContext && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700">
+              Scope: {kpiContext.roleScope === 'jurusan' ? 'Jurusan (Kaprog)' : 'Global Executive'}
+            </span>
+            <span className="rounded-full bg-amber-50 px-3 py-1 font-bold text-amber-700">
+              Alert SLA: {Number(kpiContext.slaBreachRate || 0) > 0 ? 'Aktif' : 'Normal'}
+            </span>
+            <span className="rounded-full bg-sky-50 px-3 py-1 font-bold text-sky-700">
+              Total Sesi KPI: {kpiContext.totalSessions || 0}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-green-100 bg-green-50 px-3 py-3">
+              <p className="text-xs text-slate-500">Presence Rate</p>
+              <p className="text-2xl font-black text-green-700">{kpiContext.presenceRate || 0}%</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3">
+              <p className="text-xs text-slate-500">Late Rate</p>
+              <p className="text-2xl font-black text-amber-700">{kpiContext.lateRate || 0}%</p>
+            </div>
+            <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-3">
+              <p className="text-xs text-slate-500">Tidak Masuk Rate</p>
+              <p className="text-2xl font-black text-rose-700">{kpiContext.tidakMasukRate || 0}%</p>
+            </div>
+            <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-3">
+              <p className="text-xs text-slate-500">SLA Breach Rate</p>
+              <p className="text-2xl font-black text-orange-700">{kpiContext.slaBreachRate || 0}%</p>
+            </div>
+            <div className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-3">
+              <p className="text-xs text-slate-500">Kelas Terdampak</p>
+              <p className="text-2xl font-black text-sky-700">{kpiContext.impactedClasses || 0}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="text-xs text-slate-500">Total Sesi KPI</p>
+              <p className="text-2xl font-black text-slate-700">{kpiContext.totalSessions || 0}</p>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button

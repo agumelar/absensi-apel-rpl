@@ -11,7 +11,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "npm run lint && npm run build",
-    "test:unit": "node --test src/shared/utils/compressionPolicy.test.mjs src/features/mapel/utils/sessionWorkflowRules.test.mjs src/features/mapel/utils/attendanceRecapRules.test.mjs src/features/mapel/utils/scoreRecapRules.test.mjs src/features/mapel/utils/sessionHistoryRules.test.mjs src/features/mapel/utils/attendanceIntegrityRules.test.mjs",
+    "test:unit": "node --test src/shared/utils/compressionPolicy.test.mjs src/features/mapel/utils/sessionWorkflowRules.test.mjs src/features/mapel/utils/attendanceRecapRules.test.mjs src/features/mapel/utils/scoreRecapRules.test.mjs src/features/mapel/utils/sessionHistoryRules.test.mjs src/features/mapel/utils/attendanceIntegrityRules.test.mjs src/features/dashboard/utils/executiveKpiRules.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
