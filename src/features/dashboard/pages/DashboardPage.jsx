@@ -8,6 +8,10 @@ import {
 import { Link } from 'react-router-dom';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
+import {
+  PEMBIASAAN_ADMIN_SCHEDULE_ROUTE,
+  PEMBIASAAN_ADMIN_SETTINGS_ROUTE,
+} from '../../../shared/constants/routes';
 
 const Dashboard = ({ user }) => {
   const [dataGrafik, setDataGrafik] = useState([]);
@@ -127,6 +131,10 @@ const Dashboard = ({ user }) => {
           <Link to="/manajemen-user" className="bg-blue-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">User Control</span><ArrowRight/></Link>
           <Link to="/manajemen-kelas" className="bg-indigo-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">Kelas Data</span><ArrowRight/></Link>
           <Link to="/manajemen-siswa" className="bg-violet-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">Siswa Master</span><ArrowRight/></Link>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+          <Link to={PEMBIASAAN_ADMIN_SCHEDULE_ROUTE} className="bg-emerald-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">Penjadwalan Sapa Pagi</span><ArrowRight/></Link>
+          <Link to={PEMBIASAAN_ADMIN_SETTINGS_ROUTE} className="bg-teal-600 p-6 rounded-[30px] text-white flex justify-between items-center transition-all hover:scale-[1.02]"><span className="font-black uppercase text-xs italic tracking-widest text-left">Pengaturan Pembiasaan</span><ArrowRight/></Link>
         </div>
       </PageContainer>
     );

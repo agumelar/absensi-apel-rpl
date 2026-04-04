@@ -66,6 +66,7 @@ export const walikelas = [
   { id: 'u10', walikelas_id: 'u10', nama_lengkap: 'Yanti Suryani, S.Pd',     username: 'kurikulum', password: 'demo', role: 'kurikulum', kelas_id: null, jurusan_id: null, is_guru_mapel: false },
   { id: 'u11', walikelas_id: 'u11', nama_lengkap: 'Hendra Gunawan, S.Kom',   username: 'walas4', password: 'demo', role: 'walas',     kelas_id: 'k1', jurusan_id: 'j1', is_guru_mapel: false },
   { id: 'u12', walikelas_id: 'u12', nama_lengkap: 'Fitriani, S.Pd',          username: 'walas5', password: 'demo', role: 'walas',     kelas_id: 'k2', jurusan_id: 'j1', is_guru_mapel: false },
+  { id: 'u13', walikelas_id: 'u13', nama_lengkap: 'Rina Puspita, S.Ak',      username: 'tu',     password: 'demo', role: 'tu',        kelas_id: null, jurusan_id: null, is_guru_mapel: false },
 ];
 
 // ---------- siswa (students) ----------

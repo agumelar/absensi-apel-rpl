@@ -118,6 +118,47 @@ const getWibMinutesNow = () => {
   return hours * 60 + minutes;
 };
 
+const resolveMapelGeoPolicy = async () => {
+  const { data, error } = await supabase.from('pembiasaan_settings').select('school_lat, school_lng, radius_meter').eq('id', 1).maybeSingle();
+  if (error) throw error;
+  if (!data?.school_lat || !data?.school_lng || !data?.radius_meter) {
+    return { enabled: false, schoolLat: null, schoolLng: null, radiusMeter: null };
+  }
+  return {
+    enabled: true,
+    schoolLat: Number(data.school_lat),
+    schoolLng: Number(data.school_lng),
+    radiusMeter: Number(data.radius_meter),
+  };
+};
+
+const calculateDistanceMeters = (lat1, lng1, lat2, lng2) => {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+};
+
+const assertWithinMapelGeoPolicy = async (geo = null) => {
+  const policy = await resolveMapelGeoPolicy();
+  if (!policy.enabled) return { enabled: false, distanceMeter: null, radiusMeter: null };
+
+  if (!geo || !Number.isFinite(Number(geo.lat)) || !Number.isFinite(Number(geo.lng))) {
+    throw new Error('Lokasi GPS wajib aktif untuk check-in/check-out KBM.');
+  }
+
+  const distance = calculateDistanceMeters(policy.schoolLat, policy.schoolLng, Number(geo.lat), Number(geo.lng));
+  if (distance > policy.radiusMeter) {
+    throw new Error(`Lokasi di luar radius sekolah (${policy.radiusMeter} meter).`);
+  }
+
+  return { enabled: true, distanceMeter: distance, radiusMeter: policy.radiusMeter };
+};
+
 const getDayNameWIB = (dateValue) => {
   const rawDay = new Intl.DateTimeFormat('id-ID', {
     timeZone: 'Asia/Jakarta',
@@ -743,6 +784,7 @@ export const checkInSession = async (sessionId, fotoCheckIn, options = {}) => {
   assertRequired('sessionId', sessionId);
   assertRequired('fotoCheckIn', fotoCheckIn);
   await assertSessionOwnershipOrThrow(sessionId);
+  const geoValidation = await assertWithinMapelGeoPolicy(options.geo);
 
   const { data, error } = await supabase
     .from('session')
@@ -760,12 +802,15 @@ export const checkInSession = async (sessionId, fotoCheckIn, options = {}) => {
     sessionId,
     actionType: MAPEL_AUDIT_ACTION.SESSION_CHECK_IN,
     actorName: options.actorName,
-    metadata: {
-      foto_check_in: fotoCheckIn,
-      status_after: data?.status ?? SESSION_STATUS.HADIR,
-      waktu_check_in: data?.waktu_check_in ?? null,
-    },
-  });
+      metadata: {
+        foto_check_in: fotoCheckIn,
+        status_after: data?.status ?? SESSION_STATUS.HADIR,
+        waktu_check_in: data?.waktu_check_in ?? null,
+        geo_validation_enabled: geoValidation.enabled,
+        geo_distance_meter: geoValidation.distanceMeter,
+        geo_radius_meter: geoValidation.radiusMeter,
+      },
+    });
   return data;
 };
 
@@ -773,6 +818,7 @@ export const checkOutSession = async (sessionId, fotoCheckOut, options = {}) => 
   assertRequired('sessionId', sessionId);
   assertRequired('fotoCheckOut', fotoCheckOut);
   await assertSessionOwnershipOrThrow(sessionId);
+  const geoValidation = await assertWithinMapelGeoPolicy(options.geo);
 
   const { data, error } = await supabase
     .from('session')
@@ -792,6 +838,9 @@ export const checkOutSession = async (sessionId, fotoCheckOut, options = {}) => 
     metadata: {
       foto_check_out: fotoCheckOut,
       waktu_check_out: data?.waktu_check_out ?? null,
+      geo_validation_enabled: geoValidation.enabled,
+      geo_distance_meter: geoValidation.distanceMeter,
+      geo_radius_meter: geoValidation.radiusMeter,
     },
   });
   return data;

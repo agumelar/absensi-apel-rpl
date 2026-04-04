@@ -16,6 +16,7 @@ const DEMO_ROLES = [
   { username: 'walas1',    label: 'Wali Kelas XI RPL 1',  desc: 'Absensi & Rekap Kelas' },
   { username: 'piket',     label: 'Guru Piket',           desc: 'Piket & EWS Guru Kosong' },
   { username: 'guru1',     label: 'Guru Mapel',           desc: 'Sesi Mapel & Presensi' },
+  { username: 'tu',        label: 'TU',                   desc: 'Workspace Pembiasaan Harian' },
   { username: 'admin',     label: 'Administrator',        desc: 'Manajemen Siswa, User, Kelas' },
 ];
 
@@ -216,4 +217,3 @@ const Login = ({ onLogin }) => {
 };
 
 export default Login;
-

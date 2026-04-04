@@ -65,6 +65,44 @@ export const exportJsonToExcel = async ({ rows, sheetName, fileName }) => {
   URL.revokeObjectURL(url);
 };
 
+export const exportWorkbookWithSheets = async ({ sheets = [], fileName = 'laporan.xlsx' } = {}) => {
+  const workbook = new ExcelJS.Workbook();
+
+  const safeSheets = Array.isArray(sheets) ? sheets.filter((item) => item && item.name) : [];
+  if (safeSheets.length === 0) {
+    const ws = workbook.addWorksheet('Sheet1');
+    ws.addRow(['No Data']);
+  } else {
+    safeSheets.forEach((sheet) => {
+      const worksheet = workbook.addWorksheet(String(sheet.name).slice(0, 31));
+      const rows = Array.isArray(sheet.rows) ? sheet.rows : [];
+      if (rows.length === 0) {
+        worksheet.addRow(['No Data']);
+        return;
+      }
+
+      const headers = Object.keys(rows[0]);
+      worksheet.columns = headers.map((header) => ({
+        header,
+        key: header,
+        width: Math.max(14, String(header).length + 2),
+      }));
+      rows.forEach((row) => worksheet.addRow(row));
+    });
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const exportMapelRecapToExcel = async ({
   meta = {},
   rows = [],

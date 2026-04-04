@@ -25,6 +25,12 @@ import MapelScoreRecapPage from '../features/mapel/pages/MapelScoreRecapPage';
 import MapelSessionHistoryPage from '../features/mapel/pages/MapelSessionHistoryPage';
 import MapelAuditTrailPage from '../features/mapel/pages/MapelAuditTrailPage';
 import MapelAttendanceRecapPage from '../features/mapel/pages/MapelAttendanceRecapPage';
+import PembiasaanDashboardPage from '../features/pembiasaan/pages/PembiasaanDashboardPage';
+import SapaPagiPage from '../features/pembiasaan/pages/SapaPagiPage';
+import PembiasaanPage from '../features/pembiasaan/pages/PembiasaanPage';
+import AdminSapaPagiSchedulePage from '../features/pembiasaan/pages/AdminSapaPagiSchedulePage';
+import AdminPembiasaanSettingsPage from '../features/pembiasaan/pages/AdminPembiasaanSettingsPage';
+import ExecutivePembiasaanReportPage from '../features/pembiasaan/pages/ExecutivePembiasaanReportPage';
 import RequireRole from './guards/RequireRole';
 import {
   APP_SWITCHER_ROUTE,
@@ -37,6 +43,12 @@ import {
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
+  PEMBIASAAN_ACTIVITY_ROUTE,
+  PEMBIASAAN_ADMIN_SCHEDULE_ROUTE,
+  PEMBIASAAN_ADMIN_SETTINGS_ROUTE,
+  PEMBIASAAN_DASHBOARD_ROUTE,
+  PEMBIASAAN_REPORT_ROUTE,
+  PEMBIASAAN_SAPA_ROUTE,
   TEACHER_PERFORMANCE_ROUTE,
 } from '../shared/constants/routes';
 
@@ -46,6 +58,8 @@ const AppRoutes = ({
   isWalas,
   canAccessMapel,
   canAccessMapelAudit,
+  canAccessPembiasaanWorkspace,
+  canViewPembiasaanReport,
   canViewExecutiveControl,
   canViewTeacherPerformance,
   canAccessApelWorkspace,
@@ -75,7 +89,59 @@ const AppRoutes = ({
         path={APP_SWITCHER_ROUTE}
         element={
           <RequireRole allow={hasMultiWorkspace} redirectTo={singleWorkspaceRoute}>
-            <PortalWorkspacePage canAccessMapel={canAccessMapel} apelWorkspaceRoute={singleWorkspaceRoute} />
+            <PortalWorkspacePage
+              canAccessMapel={canAccessMapel}
+              canAccessPembiasaanWorkspace={canAccessPembiasaanWorkspace}
+              apelWorkspaceRoute={singleWorkspaceRoute}
+            />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={PEMBIASAAN_DASHBOARD_ROUTE}
+        element={
+          <RequireRole allow={canAccessPembiasaanWorkspace}>
+            <PembiasaanDashboardPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={PEMBIASAAN_SAPA_ROUTE}
+        element={
+          <RequireRole allow={canAccessPembiasaanWorkspace}>
+            <SapaPagiPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={PEMBIASAAN_ACTIVITY_ROUTE}
+        element={
+          <RequireRole allow={canAccessPembiasaanWorkspace}>
+            <PembiasaanPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={PEMBIASAAN_ADMIN_SCHEDULE_ROUTE}
+        element={
+          <RequireRole allow={isAdmin}>
+            <AdminSapaPagiSchedulePage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={PEMBIASAAN_ADMIN_SETTINGS_ROUTE}
+        element={
+          <RequireRole allow={isAdmin}>
+            <AdminPembiasaanSettingsPage user={userData} />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={PEMBIASAAN_REPORT_ROUTE}
+        element={
+          <RequireRole allow={canViewPembiasaanReport}>
+            <ExecutivePembiasaanReportPage user={userData} />
           </RequireRole>
         }
       />

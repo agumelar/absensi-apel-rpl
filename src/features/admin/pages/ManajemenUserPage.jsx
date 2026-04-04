@@ -22,7 +22,7 @@ const toBooleanFlag = (value) => {
   return false;
 };
 
-const ALLOWED_ROLES = ['guru', 'walikelas', 'walas', 'piket', 'admin', 'kaprog', 'kepsek', 'kesiswaan', 'kurikulum'];
+const ALLOWED_ROLES = ['guru', 'walikelas', 'walas', 'piket', 'admin', 'kaprog', 'kepsek', 'kesiswaan', 'kurikulum', 'tu'];
 const ROLE_ALIASES = {
   wali_kelas: 'walikelas',
   wali_kls: 'walikelas',
@@ -403,6 +403,7 @@ const ManajemenUser = () => {
                 <option value="kepsek">Kepsek</option>
                 <option value="kesiswaan">Kesiswaan</option>
                 <option value="kurikulum">Kurikulum</option>
+                <option value="tu">TU</option>
               </select>
             </div>
 

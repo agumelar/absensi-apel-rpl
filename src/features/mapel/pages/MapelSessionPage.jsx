@@ -24,6 +24,11 @@ import {
   getAttendanceProgressState,
   getPhotoActionLabel,
 } from '../utils/sessionWorkflowRules';
+import {
+  GEOLOCATION_ERROR_MESSAGE,
+  getGeoLocationErrorMessage,
+  isValidGeoCoordinate,
+} from '../utils/sessionGeoRules';
 import { fetchActiveStudentsByKelas } from '../../../services/absensiService';
 import {
   flushMapelSyncQueue,
@@ -47,6 +52,42 @@ const normalizeAttendanceCode = (statusValue) => {
   if (statusLabel === 'IZIN' || statusLabel === 'I') return 'I';
   if (statusLabel === 'ALPHA' || statusLabel === 'A') return 'A';
   return statusValue;
+};
+
+const resolveGeoLocation = () =>
+  new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error(GEOLOCATION_ERROR_MESSAGE.UNSUPPORTED));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = Number(position?.coords?.latitude);
+        const lng = Number(position?.coords?.longitude);
+        const accuracy = Number(position?.coords?.accuracy);
+        if (!isValidGeoCoordinate(lat) || !isValidGeoCoordinate(lng)) {
+          reject(new Error(GEOLOCATION_ERROR_MESSAGE.UNKNOWN));
+          return;
+        }
+        resolve({ lat, lng, accuracy: Number.isFinite(accuracy) ? accuracy : null });
+      },
+      (error) => reject(new Error(getGeoLocationErrorMessage(error))),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  });
+
+const resolveGeoLocationWithRetry = async () => {
+  try {
+    return await resolveGeoLocation();
+  } catch (firstError) {
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    try {
+      return await resolveGeoLocation();
+    } catch {
+      throw firstError;
+    }
+  }
 };
 
 const MapelSessionPage = ({ user }) => {
@@ -468,14 +509,17 @@ const MapelSessionPage = ({ user }) => {
           }),
         { retries: 2, delayMs: 500 },
       );
+      const geo = await resolveGeoLocationWithRetry();
 
       if (phase === 'check_in') {
         await checkInSession(session.id, upload.publicUrl, {
           actorName: user?.nama_lengkap,
+          geo,
         });
       } else {
         await checkOutSession(session.id, upload.publicUrl, {
           actorName: user?.nama_lengkap,
+          geo,
         });
       }
 

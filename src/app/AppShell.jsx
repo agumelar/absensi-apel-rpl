@@ -23,6 +23,9 @@ import {
   Moon,
   FlaskConical,
   ClipboardList,
+  Hand,
+  CalendarClock,
+  Settings,
 } from 'lucide-react';
 import {
   APP_SWITCHER_ROUTE,
@@ -35,11 +38,18 @@ import {
   MAPEL_SCHEDULE_ROUTE,
   MAPEL_SCORE_ROUTE,
   MAPEL_SESSION_ROUTE,
+  PEMBIASAAN_ACTIVITY_ROUTE,
+  PEMBIASAAN_ADMIN_SCHEDULE_ROUTE,
+  PEMBIASAAN_ADMIN_SETTINGS_ROUTE,
+  PEMBIASAAN_DASHBOARD_ROUTE,
+  PEMBIASAAN_REPORT_ROUTE,
+  PEMBIASAAN_SAPA_ROUTE,
   TEACHER_PERFORMANCE_ROUTE,
 } from '../shared/constants/routes';
 import Button from '../shared/ui/Button';
 import { cn } from '../shared/ui/cn';
 import { isDemoMode, disableDemoMode } from '../demo/demoMode';
+import { getWorkspaceContext } from './utils/workspaceContextRules';
 
 const navBaseClass =
   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200';
@@ -65,6 +75,8 @@ const AppShell = ({
   isAdmin,
   canAccessMapel,
   canAccessMapelAudit,
+  canAccessPembiasaanWorkspace,
+  canViewPembiasaanReport,
   hasMultiWorkspace,
   deferredPrompt,
   handleInstallClick,
@@ -79,8 +91,7 @@ const AppShell = ({
 }) => {
   const location = useLocation();
   const isDemo = isDemoMode();
-  const isAuditRoute = location.pathname === MAPEL_AUDIT_ROUTE;
-  const isMapelWorkspace = location.pathname.startsWith('/mapel') && !isAuditRoute;
+  const { isMapelWorkspace, isPembiasaanWorkspace } = getWorkspaceContext(location.pathname);
   const isKesiswaanRole = userRole === 'kesiswaan';
   const isKurikulumRole = userRole === 'kurikulum';
   const showExecutiveControlMenu = isExec && !isKurikulumRole;
@@ -102,6 +113,8 @@ const AppShell = ({
     ? { to: '/piket-dashboard', icon: PieChartIcon, label: 'Dashboard Piket' }
     : isMapelWorkspace && canAccessMapel
       ? { to: MAPEL_DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard Mapel' }
+      : isPembiasaanWorkspace && canAccessPembiasaanWorkspace
+        ? null
       : showExecutiveControlMenu
         ? { to: DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Executive Control' }
         : !isExec
@@ -113,11 +126,14 @@ const AppShell = ({
       ? [{ to: APP_SWITCHER_ROUTE, icon: ArrowLeftRight, label: 'Pilih Workspace' }]
       : []),
     ...(dashboardNavItem ? [dashboardNavItem] : []),
-    ...(!isMapelWorkspace && showTeacherPerformanceMenu
+    ...(!isMapelWorkspace && !isPembiasaanWorkspace && showTeacherPerformanceMenu
       ? [{ to: TEACHER_PERFORMANCE_ROUTE, icon: BarChart3, label: 'Teacher Performance' }]
       : []),
-    ...(!isMapelWorkspace && canAccessMapelAudit
+    ...(!isMapelWorkspace && !isPembiasaanWorkspace && canAccessMapelAudit
       ? [{ to: MAPEL_AUDIT_ROUTE, icon: FileSearch, label: 'Audit Trail Mapel' }]
+      : []),
+    ...(!isMapelWorkspace && !isPembiasaanWorkspace && canViewPembiasaanReport
+      ? [{ to: PEMBIASAAN_REPORT_ROUTE, icon: FileSearch, label: 'Laporan Pembiasaan' }]
       : []),
   ];
 
@@ -137,6 +153,17 @@ const AppShell = ({
     { to: '/manajemen-kelas', icon: School, label: 'Data Kelas' },
     { to: '/manajemen-siswa', icon: Users, label: 'Data Siswa' },
     { to: '/manajemen-mapel', icon: BookOpen, label: 'Mata Pelajaran' },
+  ];
+
+  const navPembiasaan = [
+    { to: PEMBIASAAN_DASHBOARD_ROUTE, icon: LayoutDashboard, label: 'Dashboard Pembiasaan' },
+    { to: PEMBIASAAN_SAPA_ROUTE, icon: CalendarClock, label: 'Sapa Pagi' },
+    { to: PEMBIASAAN_ACTIVITY_ROUTE, icon: Hand, label: 'Pembiasaan' },
+  ];
+
+  const navPembiasaanAdmin = [
+    { to: PEMBIASAAN_ADMIN_SCHEDULE_ROUTE, icon: CalendarClock, label: 'Jadwal Sapa Pagi' },
+    { to: PEMBIASAAN_ADMIN_SETTINGS_ROUTE, icon: Settings, label: 'Pengaturan Pembiasaan' },
   ];
 
   return (
@@ -210,6 +237,20 @@ const AppShell = ({
             </div>
           )}
 
+          {isPembiasaanWorkspace && canAccessPembiasaanWorkspace && (
+            <div className="space-y-2">
+              <SectionLabel>Pembiasaan · Operasional</SectionLabel>
+              <div className="space-y-1">
+                {navPembiasaan.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+
           {isMapelWorkspace && canAccessMapel && (
             <div className="space-y-2">
               <SectionLabel>Mapel · Laporan</SectionLabel>
@@ -257,6 +298,20 @@ const AppShell = ({
               <SectionLabel>Admin Panel</SectionLabel>
               <div className="space-y-1">
                 {navAdmin.map(({ to, icon, label }) => (
+                  <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
+                    {React.createElement(icon, { size: 17, className: 'shrink-0' })}
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="space-y-2">
+              <SectionLabel>Pembiasaan · Admin</SectionLabel>
+              <div className="space-y-1">
+                {navPembiasaanAdmin.map(({ to, icon, label }) => (
                   <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} className={navClassName}>
                     {React.createElement(icon, { size: 17, className: 'shrink-0' })}
                     <span>{label}</span>
