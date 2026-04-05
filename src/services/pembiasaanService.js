@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient';
 import { getSessionOrThrow } from './auth/sessionService';
 import { getTodayDateWIB } from './shared/dateService';
 import { getEvidencePolicyByStatus, isBusinessWeekdayWIBDate } from '../features/pembiasaan/utils/attendancePolicyRules';
+import { buildTeacherRecapRows } from '../features/pembiasaan/utils/executivePembiasaanReportRules';
 
 const ACTIVITY_TYPES = {
   SAPA: 'sapa_pagi',
@@ -98,6 +99,30 @@ const getNextDateForDay = (hari) => {
 };
 
 const toRole = (value) => String(value || '').trim().toLowerCase();
+const EXCLUDED_EXECUTIVE_REPORT_ROLES = new Set(['kepsek', 'piket', 'admin']);
+const isExcludedExecutiveRole = (roleValue) => EXCLUDED_EXECUTIVE_REPORT_ROLES.has(toRole(roleValue));
+
+const normalizeDate = (value) => String(value || '').trim();
+
+const enumerateDateRange = (fromDate, toDate) => {
+  const from = normalizeDate(fromDate);
+  const to = normalizeDate(toDate);
+  if (!from || !to) return [];
+  const start = new Date(`${from}T12:00:00+07:00`);
+  const end = new Date(`${to}T12:00:00+07:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+
+  const cursor = new Date(start);
+  const result = [];
+  while (cursor <= end) {
+    const year = cursor.getUTCFullYear();
+    const month = String(cursor.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(cursor.getUTCDate()).padStart(2, '0');
+    result.push(`${year}-${month}-${day}`);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+};
 
 const assertBusinessWeekdayOrThrow = (dateValue) => {
   const targetDate = dateValue || getTodayDateWIB();
@@ -622,14 +647,93 @@ export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activit
   if (fromDate) query = query.gte('tanggal', fromDate);
   if (toDate) query = query.lte('tanggal', toDate);
   if (activityType && activityType !== 'all') query = query.eq('activity_type', activityType);
-  if (status && status !== 'all') query = query.eq('status', status);
   if (userId && userId !== 'all') query = query.eq('user_id', userId);
   if (scope.isJurusanScoped) query = query.eq('jurusan_id_snapshot', scope.jurusanId);
 
   const { data, error } = await query;
   if (error) throw error;
 
-  const rows = data || [];
+  const allRows = data || [];
+  const rows = allRows.filter((row) => !isExcludedExecutiveRole(row.role || row.role_snapshot));
+
+  const [{ data: participantsData, error: participantsError }, { data: holidaysData, error: holidaysError }] = await Promise.all([
+    fetchPembiasaanParticipantOptions().then((list) => ({ data: list, error: null })).catch((err) => ({ data: [], error: err })),
+    supabase
+      .from('school_calendar')
+      .select('tanggal, is_libur')
+      .gte('tanggal', fromDate || getTodayDateWIB())
+      .lte('tanggal', toDate || getTodayDateWIB()),
+  ]);
+
+  if (participantsError) throw participantsError;
+  if (holidaysError) throw holidaysError;
+
+  let participants = (participantsData || []).filter((row) => !isExcludedExecutiveRole(row.role));
+  if (scope.isJurusanScoped) {
+    participants = participants.filter((row) => Number.parseInt(row.jurusan_id, 10) === scope.jurusanId);
+  }
+
+  const holidaySet = new Set((holidaysData || []).filter((item) => item?.is_libur).map((item) => normalizeDate(item.tanggal)));
+  const dateList = enumerateDateRange(fromDate || getTodayDateWIB(), toDate || getTodayDateWIB());
+  const activeSchoolDates = dateList.filter((item) => isBusinessWeekdayWIBDate(item) && !holidaySet.has(item));
+
+  const obligationsByUserId = {};
+  participants.forEach((row) => {
+    obligationsByUserId[String(row.id)] = 0;
+  });
+
+  const includePembiasaan = !activityType || activityType === 'all' || activityType === ACTIVITY_TYPES.PEMBIASAAN;
+  const includeSapa = !activityType || activityType === 'all' || activityType === ACTIVITY_TYPES.SAPA;
+
+  if (includePembiasaan) {
+    const pembiasaanObligation = activeSchoolDates.length;
+    Object.keys(obligationsByUserId).forEach((id) => {
+      obligationsByUserId[id] += pembiasaanObligation;
+    });
+  }
+
+  if (includeSapa) {
+    let sapaScheduleQuery = supabase
+      .from('sapa_pagi_schedule')
+      .select('hari, user_id, walikelas:user_id(id, jurusan_id)')
+      .eq('is_active', true)
+      .in('hari', WEEKDAY_OPTIONS.map((item) => item.value));
+
+    if (scope.isJurusanScoped) {
+      sapaScheduleQuery = sapaScheduleQuery.eq('walikelas.jurusan_id', scope.jurusanId);
+    }
+
+    const { data: sapaScheduleRows, error: sapaScheduleError } = await sapaScheduleQuery;
+    if (sapaScheduleError) throw sapaScheduleError;
+
+    const userByDay = WEEKDAY_OPTIONS.reduce((acc, item) => {
+      acc[item.value] = new Set();
+      return acc;
+    }, {});
+
+    (sapaScheduleRows || []).forEach((row) => {
+      const day = normalizeHari(row.hari);
+      const uid = String(row.user_id || '');
+      if (!uid || !userByDay[day]) return;
+      userByDay[day].add(uid);
+    });
+
+    activeSchoolDates.forEach((dateValue) => {
+      const dayName = getWeekdayFromDateWIB(dateValue);
+      const users = userByDay[dayName] || new Set();
+      users.forEach((uid) => {
+        obligationsByUserId[uid] = Number(obligationsByUserId[uid] || 0) + 1;
+      });
+    });
+  }
+
+  const recapRows = buildTeacherRecapRows({ rows, participants, obligationsByUserId });
+
+  const monitoringRows = rows.filter((row) => {
+    if (!status || status === 'all') return true;
+    return String(row.status || '').toLowerCase() === String(status).toLowerCase();
+  });
+
   const summary = rows.reduce(
     (acc, row) => {
       acc.total += 1;
@@ -644,5 +748,13 @@ export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activit
     { total: 0, sapa: 0, pembiasaan: 0, hadir: 0, izin: 0, sakit: 0, alpha: 0 },
   );
 
-  return { summary, rows, scope: scope.isJurusanScoped ? 'jurusan' : 'global' };
+  return {
+    summary,
+    rows,
+    monitoringRows,
+    recapRows,
+    scope: scope.isJurusanScoped ? 'jurusan' : 'global',
+    activeDaysCount: activeSchoolDates.length,
+    excludedHolidayCount: holidaySet.size,
+  };
 };
