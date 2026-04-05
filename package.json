@@ -11,7 +11,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "npm run lint && npm run build",
-    "test:unit": "node --test src/app/utils/workspaceContextRules.test.mjs src/shared/utils/compressionPolicy.test.mjs src/features/mapel/utils/sessionWorkflowRules.test.mjs src/features/mapel/utils/sessionGeoRules.test.mjs src/features/mapel/utils/attendanceRecapRules.test.mjs src/features/mapel/utils/scoreRecapRules.test.mjs src/features/mapel/utils/sessionHistoryRules.test.mjs src/features/mapel/utils/attendanceIntegrityRules.test.mjs src/features/dashboard/utils/executiveKpiRules.test.mjs src/features/pembiasaan/utils/sapaScheduleRules.test.mjs",
+    "test:unit": "node --test src/app/utils/workspaceContextRules.test.mjs src/shared/utils/compressionPolicy.test.mjs src/features/mapel/utils/sessionWorkflowRules.test.mjs src/features/mapel/utils/sessionGeoRules.test.mjs src/features/mapel/utils/attendanceRecapRules.test.mjs src/features/mapel/utils/scoreRecapRules.test.mjs src/features/mapel/utils/sessionHistoryRules.test.mjs src/features/mapel/utils/attendanceIntegrityRules.test.mjs src/features/dashboard/utils/executiveKpiRules.test.mjs src/features/pembiasaan/utils/sapaScheduleRules.test.mjs src/features/pembiasaan/utils/attendancePolicyRules.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

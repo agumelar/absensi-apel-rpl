@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient';
 import { getSessionOrThrow } from './auth/sessionService';
 import { getTodayDateWIB } from './shared/dateService';
+import { getEvidencePolicyByStatus, isBusinessWeekdayWIBDate } from '../features/pembiasaan/utils/attendancePolicyRules';
 
 const ACTIVITY_TYPES = {
   SAPA: 'sapa_pagi',
@@ -97,6 +98,13 @@ const getNextDateForDay = (hari) => {
 };
 
 const toRole = (value) => String(value || '').trim().toLowerCase();
+
+const assertBusinessWeekdayOrThrow = (dateValue) => {
+  const targetDate = dateValue || getTodayDateWIB();
+  if (!isBusinessWeekdayWIBDate(targetDate)) {
+    throw new Error('Pembiasaan hanya aktif pada hari Senin sampai Jumat.');
+  }
+};
 
 const assertExecutiveForPembiasaanOrThrow = () => {
   const session = getSessionOrThrow();
@@ -400,10 +408,15 @@ const submitViaDirectInsert = async ({ activityType, status, note, location, fil
   const settings = await fetchPembiasaanSettings();
   if (!settings) throw new Error('Pengaturan pembiasaan belum tersedia.');
 
-  if ((status === 'izin' || status === 'sakit') && !String(note || '').trim()) {
+  assertBusinessWeekdayOrThrow(targetDate);
+
+  const policy = getEvidencePolicyByStatus(status);
+  const normalizedNote = String(note || '').trim();
+
+  if (policy.requireNote && !normalizedNote) {
     throw new Error('Catatan wajib diisi untuk status izin/sakit.');
   }
-  if (status === 'hadir' && String(note || '').trim()) {
+  if (!policy.requireNote && normalizedNote) {
     throw new Error('Catatan untuk status hadir harus kosong.');
   }
 
@@ -420,15 +433,28 @@ const submitViaDirectInsert = async ({ activityType, status, note, location, fil
     throw new Error('Waktu submit pembiasaan sudah melewati cutoff.');
   }
 
-  const dist = distanceMeters(
-    Number(settings.school_lat),
-    Number(settings.school_lng),
-    Number(location.lat),
-    Number(location.lng),
-  );
-  const radius = Number(settings.radius_meter || 200);
-  if (dist > radius) {
-    throw new Error(`Lokasi di luar radius sekolah (${radius} meter).`);
+  let dist = null;
+  let isWithinRadius = null;
+
+  if (policy.requireLocation) {
+    if (!location || !Number.isFinite(Number(location.lat)) || !Number.isFinite(Number(location.lng))) {
+      throw new Error('GPS wajib aktif untuk status hadir.');
+    }
+    if (!String(filePath || '').trim()) {
+      throw new Error('Foto bukti wajib diisi untuk status hadir.');
+    }
+
+    dist = distanceMeters(
+      Number(settings.school_lat),
+      Number(settings.school_lng),
+      Number(location.lat),
+      Number(location.lng),
+    );
+    const radius = Number(settings.radius_meter || 200);
+    if (dist > radius) {
+      throw new Error(`Lokasi di luar radius sekolah (${radius} meter).`);
+    }
+    isWithinRadius = true;
   }
 
   const payload = {
@@ -439,14 +465,14 @@ const submitViaDirectInsert = async ({ activityType, status, note, location, fil
     jurusan_id_snapshot: Number.isInteger(actorJurusan) ? actorJurusan : null,
     status,
     checkin_at: new Date().toISOString(),
-    note: status === 'hadir' ? null : String(note || '').trim() || null,
-    photo_path: filePath,
-    photo_size_kb: Math.max(1, Math.round(fileSize / 1024)),
-    lat: Number(location.lat),
-    lng: Number(location.lng),
+    note: policy.requireNote ? normalizedNote : null,
+    photo_path: policy.requirePhoto ? filePath : null,
+    photo_size_kb: policy.requirePhoto ? Math.max(1, Math.round((fileSize || 0) / 1024)) : null,
+    lat: policy.requireLocation ? Number(location.lat) : null,
+    lng: policy.requireLocation ? Number(location.lng) : null,
     distance_meter: dist,
-    is_within_radius: true,
-    evidence_source: evidenceSource,
+    is_within_radius: isWithinRadius,
+    evidence_source: policy.requirePhoto ? evidenceSource : null,
     created_by_system: false,
     updated_at: new Date().toISOString(),
   };
@@ -464,7 +490,7 @@ const submitViaDirectInsert = async ({ activityType, status, note, location, fil
     tanggal: targetDate,
     status,
     distance_meter: dist,
-    is_within_radius: true,
+    is_within_radius: isWithinRadius,
     id: data?.id,
   };
 };
@@ -472,20 +498,32 @@ const submitViaDirectInsert = async ({ activityType, status, note, location, fil
 const submitViaRpc = async ({ rpcName, status, note, activityType, preferRearCamera }) => {
   const session = getSessionOrThrow();
   const actorId = session.walikelas_id || session.id;
-  const [location, file] = await Promise.all([
-    resolveLocationWithRetry(),
-    captureFromCamera({ preferRear: preferRearCamera }),
-  ]);
-  const filePath = await uploadPembiasaanPhoto({ file, activityType, userId: actorId });
+  const targetDate = getTodayDateWIB();
+  assertBusinessWeekdayOrThrow(targetDate);
+
+  const policy = getEvidencePolicyByStatus(status);
+  let location = null;
+  let file = null;
+  let filePath = null;
+  let evidenceSource = null;
+
+  if (policy.requireLocation || policy.requirePhoto) {
+    [location, file] = await Promise.all([
+      resolveLocationWithRetry(),
+      captureFromCamera({ preferRear: preferRearCamera }),
+    ]);
+    filePath = await uploadPembiasaanPhoto({ file, activityType, userId: actorId });
+    evidenceSource = preferRearCamera ? 'rear_camera' : 'front_camera';
+  }
 
   const { data, error } = await supabase.rpc(rpcName, {
     p_status: status,
     p_note: note || null,
-    p_lat: location.lat,
-    p_lng: location.lng,
+    p_lat: location?.lat ?? null,
+    p_lng: location?.lng ?? null,
     p_photo_path: filePath,
-    p_photo_size_kb: Math.max(1, Math.round(file.size / 1024)),
-    p_evidence_source: preferRearCamera ? 'rear_camera' : 'front_camera',
+    p_photo_size_kb: file ? Math.max(1, Math.round(file.size / 1024)) : null,
+    p_evidence_source: evidenceSource,
   });
   if (error) {
     const message = String(error.message || '').toLowerCase();
@@ -500,8 +538,8 @@ const submitViaRpc = async ({ rpcName, status, note, activityType, preferRearCam
         note,
         location,
         filePath,
-        fileSize: file.size,
-        evidenceSource: preferRearCamera ? 'rear_camera' : 'front_camera',
+        fileSize: file?.size,
+        evidenceSource,
       });
     }
     throw error;

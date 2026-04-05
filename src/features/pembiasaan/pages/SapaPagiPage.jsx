@@ -64,7 +64,9 @@ const SapaPagiPage = () => {
     <PageContainer className="space-y-5">
       <PageHeader className="block">
         <PageTitle className="text-3xl">Sapa Pagi</PageTitle>
-        <PageSubtitle className="mt-2">Cutoff 06:30 WIB. Hanya peserta terjadwal yang bisa submit.</PageSubtitle>
+        <PageSubtitle className="mt-2">
+          Cutoff 06:30 WIB, Senin-Jumat. Hadir wajib GPS + foto, izin/sakit cukup catatan.
+        </PageSubtitle>
       </PageHeader>
 
       {!isAssigned ? (
@@ -97,7 +99,7 @@ const SapaPagiPage = () => {
                   onChange={(event) => setNote(event.target.value)}
                   rows={3}
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                  placeholder="Wajib diisi untuk izin/sakit"
+                  placeholder="Wajib diisi untuk izin/sakit (tanpa GPS/foto)"
                 />
               </label>
             )}

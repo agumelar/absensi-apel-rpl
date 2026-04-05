@@ -38,7 +38,9 @@ const PembiasaanPage = () => {
     <PageContainer className="space-y-5">
       <PageHeader className="block">
         <PageTitle className="text-3xl">Pembiasaan</PageTitle>
-        <PageSubtitle className="mt-2">Cutoff 07:00 WIB. Kamera belakang + GPS wajib aktif.</PageSubtitle>
+        <PageSubtitle className="mt-2">
+          Cutoff 07:00 WIB, Senin-Jumat. Hadir wajib GPS + foto, izin/sakit cukup catatan.
+        </PageSubtitle>
       </PageHeader>
 
       <Card>
@@ -59,17 +61,17 @@ const PembiasaanPage = () => {
           </label>
 
           {(status === 'izin' || status === 'sakit') && (
-            <label className="block text-xs font-bold text-slate-600">
-              Catatan
-              <textarea
+              <label className="block text-xs font-bold text-slate-600">
+                Catatan
+                <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={3}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                placeholder="Wajib diisi untuk izin/sakit"
-              />
-            </label>
-          )}
+                  placeholder="Wajib diisi untuk izin/sakit (tanpa GPS/foto)"
+                />
+              </label>
+            )}
 
           <Button onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'Menyimpan...' : 'Submit Pembiasaan'}
