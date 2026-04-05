@@ -26,6 +26,11 @@ import {
   computeSlaBreach,
   computeTeacherRates,
 } from '../features/dashboard/utils/executiveKpiRules';
+import {
+  buildSchoolHolidaySet,
+  filterActiveSchoolSessionRows,
+  isActiveSchoolDate,
+} from '../features/mapel/utils/schoolDayRules';
 
 const SESSION_STATUS = {
   HADIR: 'Hadir',
@@ -168,6 +173,17 @@ const getDayNameWIB = (dateValue) => {
 };
 
 const normalizeSessionStatus = (status) => String(status || '').trim().toLowerCase();
+
+const fetchSchoolHolidaySetInRange = async ({ fromDate, toDate } = {}) => {
+  if (!fromDate || !toDate) return new Set();
+  const { data, error } = await supabase
+    .from('school_calendar')
+    .select('tanggal, is_libur')
+    .gte('tanggal', fromDate)
+    .lte('tanggal', toDate);
+  if (error) throw error;
+  return buildSchoolHolidaySet(data || []);
+};
 
 const assertPiketAccessOrThrow = () => {
   const session = getSessionOrThrow();
@@ -420,7 +436,10 @@ export const fetchMapelAttendanceRecap = async ({
 
   if (sessionError) throw sessionError;
 
-  const sessionIds = (sessionRows || []).map((item) => item.id);
+  const holidaySet = await fetchSchoolHolidaySetInRange({ fromDate: period.fromDate, toDate: period.toDate });
+  const activeSessionRows = filterActiveSchoolSessionRows(sessionRows || [], holidaySet);
+
+  const sessionIds = activeSessionRows.map((item) => item.id);
   const [{ data: students, error: studentError }, { data: attendanceRows, error: attendanceError }] =
     await Promise.all([
       supabase
@@ -463,7 +482,7 @@ export const fetchMapelAttendanceRecap = async ({
       .filter((row) => validAttendanceStatuses.has(String(row?.status || '').trim()))
       .map((row) => `${row.session_id}:${row.siswa_id}`),
   );
-  const sessionById = new Map((sessionRows || []).map((sessionRow) => [String(sessionRow.id), sessionRow]));
+  const sessionById = new Map(activeSessionRows.map((sessionRow) => [String(sessionRow.id), sessionRow]));
   const missingEntries = [];
 
   (students || []).forEach((studentRow) => {
@@ -482,7 +501,7 @@ export const fetchMapelAttendanceRecap = async ({
     });
   });
 
-  const postingDate = (sessionRows || []).reduce((latest, row) => {
+  const postingDate = activeSessionRows.reduce((latest, row) => {
     const createdAt = String(row?.created_at || '').trim();
     if (!createdAt) return latest;
     if (!latest || createdAt > latest) return createdAt;
@@ -547,7 +566,10 @@ export const fetchMapelScoreRecap = async ({
 
   if (sessionError) throw sessionError;
 
-  const sessionIds = (sessionRows || []).map((item) => item.id);
+  const holidaySet = await fetchSchoolHolidaySetInRange({ fromDate: period.fromDate, toDate: period.toDate });
+  const activeSessionRows = filterActiveSchoolSessionRows(sessionRows || [], holidaySet);
+
+  const sessionIds = activeSessionRows.map((item) => item.id);
   const [{ data: students, error: studentError }, { data: scoreRows, error: scoreError }] = await Promise.all([
     supabase
       .from('siswa')
@@ -570,7 +592,7 @@ export const fetchMapelScoreRecap = async ({
   });
   const summary = summarizeScoreRecapRows(rows);
 
-  const postingDate = (sessionRows || []).reduce((latest, row) => {
+  const postingDate = activeSessionRows.reduce((latest, row) => {
     const createdAt = String(row?.created_at || '').trim();
     if (!createdAt) return latest;
     if (!latest || createdAt > latest) return createdAt;
@@ -1375,6 +1397,13 @@ const buildDailySlaMonitoringRows = async ({ schedules, targetDate, nowMinutes }
 export const fetchGuruKosongEws = async ({ tanggal, kelasId } = {}) => {
   assertPiketAccessOrThrow();
   const targetDate = tanggal || getTodayDateWIB();
+  const targetHolidaySet = await fetchSchoolHolidaySetInRange({ fromDate: targetDate, toDate: targetDate });
+  if (!isActiveSchoolDate(targetDate, targetHolidaySet)) {
+    return {
+      summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
+      rows: [],
+    };
+  }
   const targetDay = getDayNameWIB(targetDate);
   const nowMinutes = targetDate === getTodayDateWIB() ? getWibMinutesNow() : 24 * 60;
 
@@ -1397,6 +1426,13 @@ export const fetchGuruKosongEws = async ({ tanggal, kelasId } = {}) => {
 export const fetchExecutiveDailyMonitoring = async ({ tanggal, kelasId } = {}) => {
   const scope = await resolveExecutiveScopeOrThrow();
   const targetDate = tanggal || getTodayDateWIB();
+  const targetHolidaySet = await fetchSchoolHolidaySetInRange({ fromDate: targetDate, toDate: targetDate });
+  if (!isActiveSchoolDate(targetDate, targetHolidaySet)) {
+    return {
+      summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
+      rows: [],
+    };
+  }
   const targetDay = getDayNameWIB(targetDate);
   const nowMinutes = targetDate === getTodayDateWIB() ? getWibMinutesNow() : 24 * 60;
 
@@ -1585,10 +1621,13 @@ export const fetchExecutiveMapelKpiDataset = async ({
   if (sessionError) throw sessionError;
   if (guruError) throw guruError;
 
+  const holidaySet = await fetchSchoolHolidaySetInRange({ fromDate: startDate, toDate: endDate });
+  const activeSessionRows = filterActiveSchoolSessionRows(sessionRows || [], holidaySet);
+
   const guruMap = new Map((guruRows || []).map((row) => [String(row.id), row.nama_lengkap]));
   const scheduleMap = new Map(schedules.map((row) => [String(row.id), row]));
 
-  const rows = (sessionRows || []).map((row) => {
+  const rows = activeSessionRows.map((row) => {
     const schedule = scheduleMap.get(String(row.schedule_id)) || null;
     const statusNorm = normalizeSessionStatus(row.status);
     const isTidakMasuk = statusNorm === 'tidak masuk' || statusNorm === 'absent';
@@ -2033,11 +2072,9 @@ export const fetchMapelAuditSessionSummary = async ({
     .from('session')
     .select(
       'id, tanggal, status, waktu_check_in, foto_check_in, waktu_check_out, foto_check_out, schedule:schedule_id!inner(id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel, kode_mapel))',
-      { count: 'exact' },
     )
     .order('tanggal', { ascending: false })
-    .order('created_at', { ascending: false })
-    .range(from, to);
+    .order('created_at', { ascending: false });
 
   if (fromDate) {
     query = query.gte('tanggal', fromDate);
@@ -2054,17 +2091,24 @@ export const fetchMapelAuditSessionSummary = async ({
     query = query.eq('schedule.mapel_id', Number(mapelId));
   }
 
-  const { data: sessionRows, error: sessionError, count } = await query;
+  const { data: sessionRows, error: sessionError } = await query;
   if (sessionError) throw sessionError;
 
-  const rows = sessionRows || [];
+  const holidaySet = await fetchSchoolHolidaySetInRange({
+    fromDate: fromDate || getTodayDateWIB(),
+    toDate: toDate || getTodayDateWIB(),
+  });
+  const activeRows = filterActiveSchoolSessionRows(sessionRows || [], holidaySet);
+  const totalFiltered = activeRows.length;
+  const rows = activeRows.slice(from, to + 1);
+
   if (rows.length === 0) {
     return {
       rows: [],
-      total: count || 0,
+      total: totalFiltered,
       page: safePage,
       pageSize: safePageSize,
-      totalPages: Math.max(1, Math.ceil((count || 0) / safePageSize)),
+      totalPages: Math.max(1, Math.ceil(totalFiltered / safePageSize)),
     };
   }
 
@@ -2136,10 +2180,10 @@ export const fetchMapelAuditSessionSummary = async ({
 
   return {
     rows: normalizedRows,
-    total: count || 0,
+    total: totalFiltered,
     page: safePage,
     pageSize: safePageSize,
-    totalPages: Math.max(1, Math.ceil((count || 0) / safePageSize)),
+    totalPages: Math.max(1, Math.ceil(totalFiltered / safePageSize)),
   };
 };
 

@@ -174,6 +174,7 @@ const MapelAuditTrailPage = () => {
           periodeLabel: `${filters.fromDate || '-'} s/d ${filters.toDate || '-'}`,
           kelasLabel: selectedKelasLabel,
           mapelLabel: selectedMapelLabel,
+          holidayPolicyLabel: 'Tanggal libur sekolah dikecualikan dari ringkasan sesi',
         },
         summary: {
           presenceRate: kpiContext?.presenceRate || 0,

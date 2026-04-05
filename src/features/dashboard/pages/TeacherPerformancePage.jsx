@@ -226,6 +226,7 @@ const TeacherPerformancePage = ({ user }) => {
         bulanLabel: selectedMonth,
         roleScopeLabel: isKaprog ? 'Kaprog (Jurusan)' : 'Global Executive',
         trendByLabel: 'Guru',
+        holidayPolicyLabel: 'Tanggal libur sekolah dikecualikan dari rekap',
       },
       summary: {
         presenceRate: monthly.summary.averagePresenceRate,
