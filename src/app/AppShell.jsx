@@ -28,6 +28,7 @@ import {
   Settings,
 } from 'lucide-react';
 import {
+  ADMIN_SCHOOL_CALENDAR_ROUTE,
   APP_SWITCHER_ROUTE,
   DASHBOARD_ROUTE,
   MAPEL_AUDIT_ROUTE,
@@ -153,6 +154,7 @@ const AppShell = ({
     { to: '/manajemen-kelas', icon: School, label: 'Data Kelas' },
     { to: '/manajemen-siswa', icon: Users, label: 'Data Siswa' },
     { to: '/manajemen-mapel', icon: BookOpen, label: 'Mata Pelajaran' },
+    { to: ADMIN_SCHOOL_CALENDAR_ROUTE, icon: CalendarClock, label: 'Kalender Sekolah' },
   ];
 
   const navPembiasaan = [

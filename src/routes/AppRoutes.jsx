@@ -17,6 +17,7 @@ import ManajemenUser from '../features/admin/pages/ManajemenUserPage';
 import PublicMonitoring from '../features/monitoring/pages/PublicMonitoringPage';
 import ManajemenKelas from '../features/admin/pages/ManajemenKelasPage';
 import ManajemenMapel from '../features/admin/pages/ManajemenMapelPage';
+import AdminSchoolCalendarPage from '../features/admin/pages/AdminSchoolCalendarPage';
 import MapelHomePage from '../features/mapel/pages/MapelHomePage';
 import MapelSchedulePage from '../features/mapel/pages/MapelSchedulePage';
 import MapelSessionPage from '../features/mapel/pages/MapelSessionPage';
@@ -34,6 +35,7 @@ import ExecutivePembiasaanReportPage from '../features/pembiasaan/pages/Executiv
 import RequireRole from './guards/RequireRole';
 import {
   APP_SWITCHER_ROUTE,
+  ADMIN_SCHOOL_CALENDAR_ROUTE,
   DASHBOARD_ROUTE,
   MAPEL_AUDIT_ROUTE,
   MAPEL_DASHBOARD_ROUTE,
@@ -94,6 +96,14 @@ const AppRoutes = ({
               canAccessPembiasaanWorkspace={canAccessPembiasaanWorkspace}
               apelWorkspaceRoute={singleWorkspaceRoute}
             />
+          </RequireRole>
+        }
+      />
+      <Route
+        path={ADMIN_SCHOOL_CALENDAR_ROUTE}
+        element={
+          <RequireRole allow={isAdmin}>
+            <AdminSchoolCalendarPage user={userData} />
           </RequireRole>
         }
       />

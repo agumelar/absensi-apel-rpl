@@ -11,6 +11,7 @@ export const MAPEL_SCORE_RECAP_ROUTE = '/mapel/rekap-penilaian-keaktifan';
 export const MAPEL_HISTORY_ROUTE = '/mapel/riwayat';
 export const MAPEL_AUDIT_ROUTE = '/mapel/audit';
 export const MAPEL_RECAP_ROUTE = '/mapel/rekap-kehadiran';
+export const ADMIN_SCHOOL_CALENDAR_ROUTE = '/admin/kalender-sekolah';
 export const PEMBIASAAN_DASHBOARD_ROUTE = '/pembiasaan';
 export const PEMBIASAAN_SAPA_ROUTE = '/pembiasaan/sapa-pagi';
 export const PEMBIASAAN_ACTIVITY_ROUTE = '/pembiasaan/kegiatan';
