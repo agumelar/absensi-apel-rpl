@@ -3,10 +3,9 @@ import {
   DASHBOARD_ROUTE,
   MAPEL_DASHBOARD_ROUTE,
   PEMBIASAAN_DASHBOARD_ROUTE,
-  PEMBIASAAN_REPORT_ROUTE,
   PIKET_DASHBOARD_ROUTE,
   TEACHER_PERFORMANCE_ROUTE,
-} from '../../shared/constants/routes';
+} from '../../shared/constants/routes.js';
 import {
   isExecutiveRole,
   isMapelAuditRole,
@@ -14,7 +13,7 @@ import {
   isPembiasaanParticipantRole,
   normalizeBooleanFlag,
   normalizeRole,
-} from '../../shared/constants/roles';
+} from '../../shared/constants/roles.js';
 
 const useUserRoleFlags = (userData) => {
   const userRole = normalizeRole(userData?.role);
@@ -33,11 +32,8 @@ const useUserRoleFlags = (userData) => {
   const canAccessPembiasaanWorkspace = isPembiasaanParticipantRole(userRole);
   const canViewPembiasaanReport = isExec;
   const canAccessApelWorkspace = isAdmin || isPiket || isExec || isWalas;
-  const hasMultiWorkspace =
-    !isKepsek &&
-    !isAdmin &&
-    !isPiket &&
-    ((canAccessApelWorkspace && canAccessMapel) || (canAccessApelWorkspace && canAccessPembiasaanWorkspace));
+  const workspaceAccessCount = [canAccessApelWorkspace, canAccessMapel, canAccessPembiasaanWorkspace].filter(Boolean).length;
+  const hasMultiWorkspace = !isKepsek && !isAdmin && !isPiket && workspaceAccessCount >= 2;
   const canViewExecutiveControl = isExec && !isKurikulum;
   const canViewTeacherPerformance = isExec && !isKesiswaan;
   const singleWorkspaceRoute = isTu

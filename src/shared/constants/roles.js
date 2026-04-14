@@ -3,6 +3,7 @@ export const MAPEL_ACCESS_ROLES = [];
 export const MAPEL_AUDIT_ROLES = ['kepsek', 'kaprog', 'kurikulum'];
 export const PEMBIASAAN_PARTICIPANT_ROLES = [
   'guru',
+  'guru_mapel',
   'tu',
   'kesiswaan',
   'kaprog',

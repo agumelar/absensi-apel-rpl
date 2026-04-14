@@ -94,6 +94,7 @@ const AppRoutes = ({
             <PortalWorkspacePage
               canAccessMapel={canAccessMapel}
               canAccessPembiasaanWorkspace={canAccessPembiasaanWorkspace}
+              canAccessApelWorkspace={canAccessApelWorkspace}
               apelWorkspaceRoute={singleWorkspaceRoute}
             />
           </RequireRole>
