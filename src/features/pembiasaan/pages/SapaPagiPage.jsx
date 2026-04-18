@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import { Loader2 } from 'lucide-react';
 
 import { checkMySapaPagiAssignment, submitSapaPagiAttendance } from '../../../services/pembiasaanService';
+import { ATTENDANCE_DAY_OFF_MESSAGE, getAttendanceDayStatus } from '../../../services/shared/attendanceDayService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -19,20 +20,40 @@ const SapaPagiPage = () => {
   const [status, setStatus] = useState('hadir');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [isAttendanceDayOff, setIsAttendanceDayOff] = useState(false);
 
   useEffect(() => {
+    let isCancelled = false;
     const load = async () => {
       try {
         setLoading(true);
+        const dayStatus = await getAttendanceDayStatus({});
+        if (isCancelled) return;
+
+        if (!dayStatus.isActive) {
+          setIsAttendanceDayOff(true);
+          setIsAssigned(false);
+          return;
+        }
+
+        setIsAttendanceDayOff(false);
         const assigned = await checkMySapaPagiAssignment({});
+        if (isCancelled) return;
         setIsAssigned(assigned);
       } catch (error) {
+        if (isCancelled) return;
         Swal.fire('Gagal', error.message, 'error');
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
     load();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const handleSubmit = async () => {
@@ -69,7 +90,11 @@ const SapaPagiPage = () => {
         </PageSubtitle>
       </PageHeader>
 
-      {!isAssigned ? (
+      {isAttendanceDayOff ? (
+        <Card>
+          <CardContent className="p-5 text-sm font-semibold text-amber-800">{ATTENDANCE_DAY_OFF_MESSAGE}</CardContent>
+        </Card>
+      ) : !isAssigned ? (
         <Card>
           <CardContent className="p-5 text-sm text-slate-600">Tidak ada jadwal sapa pagi untuk Anda.</CardContent>
         </Card>

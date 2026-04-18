@@ -6,7 +6,7 @@
  * Semua mutasi (insert/upsert/update/delete) diabaikan dan mengembalikan sukses.
  * Operasi storage (upload) juga diabaikan.
  */
-import { DEMO_DB } from './demoData';
+import { DEMO_DB } from './demoData.js';
 
 // ---------- utility ----------
 

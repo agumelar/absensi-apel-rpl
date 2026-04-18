@@ -10,6 +10,7 @@ import {
   upsertAbsensi,
 } from '../../../services/absensiService';
 import { uploadBuktiAbsen } from '../../../services/supabase/storageService';
+import { ATTENDANCE_DAY_OFF_MESSAGE, getAttendanceDayStatus } from '../../../services/shared/attendanceDayService';
 
 const PiketAbsensiGlobal = () => {
   const [kelas, setKelas] = useState([]);
@@ -20,13 +21,34 @@ const PiketAbsensiGlobal = () => {
   const [isLibur, setIsLibur] = useState(false);
 
   useEffect(() => {
-    // 1. CEK HARI LIBUR
-    const hariIni = new Date().getDay();
-    if (hariIni === 0 || hariIni === 6) { 
-      setIsLibur(true);
-    } else {
-      fetchKelas();
-    }
+    let isCancelled = false;
+    const initPage = async () => {
+      try {
+        const dayStatus = await getAttendanceDayStatus({});
+        if (isCancelled) return;
+
+        if (!dayStatus.isActive) {
+          setIsLibur(true);
+          setKelas([]);
+          setSelectedKelas('');
+          setSiswa([]);
+          setAbsensiHariIni({});
+          return;
+        }
+
+        setIsLibur(false);
+        await fetchKelas();
+      } catch (error) {
+        if (isCancelled) return;
+        console.error('Gagal cek hari aktif absensi:', error.message);
+      }
+    };
+
+    initPage();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const fetchKelas = async () => {
@@ -135,8 +157,7 @@ const PiketAbsensiGlobal = () => {
   if (isLibur) return (
     <div className="flex flex-col items-center justify-center p-20 text-center">
       <Coffee size={80} className="text-blue-200 mb-6" />
-      <h2 className="text-2xl font-black text-gray-800 italic uppercase leading-none">Meja Piket Tutup</h2>
-      <p className="text-gray-400 font-bold text-[10px] mt-4 uppercase tracking-[0.2em]">Koreksi absen hanya tersedia di hari sekolah.</p>
+      <p className="text-sm font-black text-gray-700 uppercase tracking-wide">{ATTENDANCE_DAY_OFF_MESSAGE}</p>
     </div>
   );
 

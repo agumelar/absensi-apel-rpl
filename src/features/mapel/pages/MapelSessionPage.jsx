@@ -36,6 +36,7 @@ import {
   saveAttendanceWithOfflineFallback,
 } from '../../../services/mapelSyncQueueService';
 import { getTodayDateWIB } from '../../../services/shared/dateService';
+import { ATTENDANCE_DAY_OFF_MESSAGE, getAttendanceDayStatus } from '../../../services/shared/attendanceDayService';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -113,6 +114,7 @@ const MapelSessionPage = ({ user }) => {
   const [absenceFile, setAbsenceFile] = useState(null);
   const [absenceTask, setAbsenceTask] = useState(null);
   const [savingAbsenceTask, setSavingAbsenceTask] = useState(false);
+  const [isAttendanceDayOff, setIsAttendanceDayOff] = useState(false);
   const qrScannerRef = useRef(null);
   const qrScanLockRef = useRef(false);
   const qrLastDecodedRef = useRef('');
@@ -138,13 +140,75 @@ const MapelSessionPage = ({ user }) => {
     }
   }, [guruId, selectedScheduleId, today]);
 
+  const resetForDayOff = useCallback(() => {
+    setSchedules([]);
+    setTodaySessions([]);
+    setSelectedScheduleId('');
+    setAgendaDraft({ topik: '', metode: '' });
+    setAgendaSubmitted(false);
+    setStudents([]);
+    setAttendanceDraft({});
+    setAttendanceServerSnapshot({});
+    setSearchTerm('');
+    setStatusFilter('all');
+    setAbsenceInstruksi('');
+    setAbsenceFile(null);
+    setAbsenceTask(null);
+  }, []);
+
+  const stopQrScanner = useCallback(async () => {
+    const scanner = qrScannerRef.current;
+    if (!scanner) return;
+
+    try {
+      await scanner.stop();
+    } catch (error) {
+      console.warn('QR stop warning:', error.message);
+    }
+
+    try {
+      await scanner.clear();
+    } catch (error) {
+      console.warn('QR clear warning:', error.message);
+    }
+
+    qrScannerRef.current = null;
+  }, []);
+
   useEffect(() => {
-    loadData().catch((error) => Swal.fire('Gagal', error.message, 'error'));
-  }, [loadData]);
+    let isCancelled = false;
+    const initPage = async () => {
+      try {
+        const dayStatus = await getAttendanceDayStatus({ tanggal: today });
+        if (isCancelled) return;
+
+        if (!dayStatus.isActive) {
+          setIsAttendanceDayOff(true);
+          stopQrScanner().catch((error) => console.warn('QR stop warning:', error.message));
+          setQrScannerOpen(false);
+          setQrLastResult('');
+          resetForDayOff();
+          return;
+        }
+
+        setIsAttendanceDayOff(false);
+        await loadData();
+      } catch (error) {
+        if (isCancelled) return;
+        Swal.fire('Gagal', error.message, 'error');
+      }
+    };
+
+    initPage();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [loadData, resetForDayOff, stopQrScanner, today]);
 
   const selectedSchedule = schedules.find((item) => String(item.id) === String(selectedScheduleId));
   const currentSession = todaySessions.find((item) => String(item.schedule_id) === String(selectedScheduleId));
-  const hasTodaySchedule = schedules.length > 0;
+  const hasTodaySchedule = !isAttendanceDayOff && schedules.length > 0;
   const attendanceDraftStorageKey = buildAttendanceDraftKey({
     userId: user?.id,
     sessionId: currentSession?.id,
@@ -243,6 +307,7 @@ const MapelSessionPage = ({ user }) => {
   }, []);
 
   useEffect(() => {
+    if (isAttendanceDayOff) return;
     const loadAgenda = async () => {
       if (!currentSession?.id) {
         setAgendaDraft({ topik: '', metode: '' });
@@ -262,9 +327,10 @@ const MapelSessionPage = ({ user }) => {
     };
 
     loadAgenda().catch((error) => Swal.fire('Gagal', error.message, 'error'));
-  }, [currentSession?.id]);
+  }, [currentSession?.id, isAttendanceDayOff]);
 
   useEffect(() => {
+    if (isAttendanceDayOff) return;
     const loadStudentsAndAttendance = async () => {
       if (!selectedSchedule?.kelas_id) {
         setStudents([]);
@@ -307,7 +373,7 @@ const MapelSessionPage = ({ user }) => {
     };
 
     loadStudentsAndAttendance().catch((error) => Swal.fire('Gagal', error.message, 'error'));
-  }, [selectedSchedule?.kelas_id, currentSession?.id, attendanceDraftStorageKey]);
+  }, [selectedSchedule?.kelas_id, currentSession?.id, attendanceDraftStorageKey, isAttendanceDayOff]);
 
   useEffect(() => {
     refreshSyncSummary();
@@ -585,25 +651,6 @@ const MapelSessionPage = ({ user }) => {
     setQrScannerOpen((prev) => !prev);
   };
 
-  const stopQrScanner = useCallback(async () => {
-    const scanner = qrScannerRef.current;
-    if (!scanner) return;
-
-    try {
-      await scanner.stop();
-    } catch (error) {
-      console.warn('QR stop warning:', error.message);
-    }
-
-    try {
-      await scanner.clear();
-    } catch (error) {
-      console.warn('QR clear warning:', error.message);
-    }
-
-    qrScannerRef.current = null;
-  }, []);
-
   const parseQrCandidates = useCallback((rawText) => {
     const text = String(rawText || '').trim();
     if (!text) return [];
@@ -812,7 +859,15 @@ const MapelSessionPage = ({ user }) => {
         <PageSubtitle className="mt-2 normal-case tracking-wide text-slate-500">Pilih jadwal aktif, lalu lakukan check-in dan check-out berbasis foto.</PageSubtitle>
       </PageHeader>
 
-      {!hasTodaySchedule && (
+      {isAttendanceDayOff && (
+        <Card className="rounded-3xl">
+          <CardContent className="p-6 md:p-8">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">{ATTENDANCE_DAY_OFF_MESSAGE}</div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isAttendanceDayOff && !hasTodaySchedule && (
         <Card className="rounded-3xl">
           <CardContent className="p-6 md:p-8">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { isDemoMode } from '../../demo/demoMode';
-import { createMockSupabaseClient } from '../../demo/mockSupabase';
+import { isDemoMode } from '../../demo/demoMode.js';
+import { createMockSupabaseClient } from '../../demo/mockSupabase.js';
 
 const supabaseUrl = 'https://pbiffmnzszqdcngbzzsr.supabase.co';
 const supabaseAnonKey =
