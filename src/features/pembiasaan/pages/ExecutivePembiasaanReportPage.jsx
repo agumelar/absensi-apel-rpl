@@ -4,7 +4,12 @@ import Swal from 'sweetalert2';
 import { fetchExecutivePembiasaanReport } from '../../../services/pembiasaanService';
 import { exportWorkbookWithSheets } from '../../../services/shared/excelService';
 import { getDateDaysAgoWIB, getTodayDateWIB } from '../../../services/shared/dateService';
-import { buildDailyMonitoringRows } from '../utils/executivePembiasaanReportRules';
+import {
+  buildDetailHistoryExportRows,
+  buildDailyMonitoringExportRows,
+  buildDailyMonitoringRows,
+  formatCheckinAtToWIB,
+} from '../utils/executivePembiasaanReportRules';
 import Button from '../../../shared/ui/Button';
 import Card, { CardContent } from '../../../shared/ui/Card';
 import { PageContainer, PageHeader, PageSubtitle, PageTitle } from '../../../shared/ui/PageLayout';
@@ -54,6 +59,8 @@ const ExecutivePembiasaanReportPage = () => {
       { metric: 'Hari Aktif Sekolah', value: report.activeDaysCount || 0 },
       { metric: 'Hari Libur Dikecualikan', value: report.excludedHolidayCount || 0 },
     ];
+    const monitoringExportRows = buildDailyMonitoringExportRows(monitoringRows);
+    const detailHistoryExportRows = buildDetailHistoryExportRows(report.rows);
 
     await exportWorkbookWithSheets({
       fileName: `Laporan_Pembiasaan_${fromDate}_${toDate}.xlsx`,
@@ -61,13 +68,13 @@ const ExecutivePembiasaanReportPage = () => {
         activeTab === 'monitoring'
           ? [
               { name: 'Dashboard_Ringkas', rows: summaryRows },
-              { name: 'Monitoring_Harian', rows: monitoringRows },
-              { name: 'Riwayat_Detail', rows: report.rows },
+              { name: 'Monitoring_Harian', rows: monitoringExportRows },
+              { name: 'Riwayat_Detail', rows: detailHistoryExportRows },
             ]
           : [
               { name: 'Dashboard_Ringkas', rows: summaryRows },
               { name: 'Rekap_Guru', rows: recapRows },
-              { name: 'Riwayat_Detail', rows: report.rows },
+              { name: 'Riwayat_Detail', rows: detailHistoryExportRows },
             ],
     });
 
@@ -165,7 +172,7 @@ const ExecutivePembiasaanReportPage = () => {
                       <td className="px-3 py-2">{row.nama_lengkap || '-'}</td>
                       <td className="px-3 py-2">{row.role || '-'}</td>
                       <td className="px-3 py-2">{row.status || '-'}</td>
-                      <td className="px-3 py-2">{row.checkin_at ? String(row.checkin_at).slice(11, 16) : '-'}</td>
+                      <td className="px-3 py-2">{formatCheckinAtToWIB(row.checkin_at)}</td>
                       <td className="px-3 py-2">{row.distance_meter || '-'}</td>
                       <td className="px-3 py-2">{row.note || '-'}</td>
                     </tr>
