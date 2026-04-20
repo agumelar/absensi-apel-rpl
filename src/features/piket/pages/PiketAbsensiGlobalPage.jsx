@@ -2,6 +2,11 @@ import React, { useCallback, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { Filter, Loader2, Clock, Image as ImageIcon, Coffee, UserCheck } from 'lucide-react';
 import { compressImage } from '../../../shared/utils/compressor';
+import {
+  getCurrentTimeHHMMWIB,
+  normalizeAttendanceTimeInput,
+  toAttendanceTimeForDb,
+} from '../../../shared/utils/attendanceTime';
 import { getTodayDateWIB } from '../../../services/shared/dateService';
 import { fetchMasterKelas } from '../../../services/piketService';
 import {
@@ -19,6 +24,8 @@ const PiketAbsensiGlobal = () => {
   const [loading, setLoading] = useState(false);
   const [absensiHariIni, setAbsensiHariIni] = useState({});
   const [isLibur, setIsLibur] = useState(false);
+
+  const defaultLateTimeValue = getCurrentTimeHHMMWIB();
 
   useEffect(() => {
     let isCancelled = false;
@@ -101,23 +108,35 @@ const PiketAbsensiGlobal = () => {
     if (status === 'Kesiangan') {
       const { value: jam } = await Swal.fire({
         title: 'Jam Kedatangan',
-        html: `
-          <div class="text-left">
-            <p class="text-[10px] font-black uppercase text-gray-400 mb-2">Siswa: ${namaSiswa}</p>
-            <input type="time" id="swal-input-time" class="swal2-input !m-0 !w-full" style="display: block; font-family: monospace;">
-          </div>
-        `,
-        focusConfirm: false,
-        preConfirm: () => {
-          const val = document.getElementById('swal-input-time').value;
-          if (!val) return Swal.showValidationMessage('Jam wajib diisi!');
-          return val;
+        text: `Siswa: ${namaSiswa}`,
+        input: 'time',
+        inputLabel: 'Pilih jam kedatangan',
+        inputValue: defaultLateTimeValue,
+        customClass: {
+          popup: 'swal-time-picker-popup',
+          input: 'swal-time-picker-input',
+        },
+        inputAttributes: {
+          step: '60',
+          autocapitalize: 'off',
+          autocomplete: 'off',
+          autocorrect: 'off',
+        },
+        preConfirm: (value) => {
+          const normalized = normalizeAttendanceTimeInput(value);
+          if (!normalized) {
+            Swal.showValidationMessage('Format jam tidak valid. Gunakan HH:mm (contoh 07:35).');
+            return null;
+          }
+          return normalized;
         },
         confirmButtonText: 'Simpan',
         showCancelButton: true
       });
-      if (!jam) return;
-      payload.jam_hadir = jam;
+
+      const jamHadir = toAttendanceTimeForDb(jam);
+      if (!jamHadir) return;
+      payload.jam_hadir = jamHadir;
     }
 
     if (status === 'Sakit' || status === 'Izin') {

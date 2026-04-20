@@ -252,3 +252,30 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+.swal-time-picker-popup {
+  color-scheme: light;
+}
+
+.swal-time-picker-popup .swal-time-picker-input {
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font-weight: 700;
+}
+
+.swal-time-picker-popup .swal-time-picker-input::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  cursor: pointer;
+}
+
+:root[data-theme='dark'] .swal-time-picker-popup {
+  color-scheme: dark;
+}
+
+:root[data-theme='dark'] .swal-time-picker-popup .swal-time-picker-input {
+  background-color: #0f172a;
+  color: #e2e8f0;
+  border-color: #475569;
+}

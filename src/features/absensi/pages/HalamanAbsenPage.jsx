@@ -6,6 +6,11 @@ import {
 } from 'lucide-react';
 import { compressImage } from '../../../shared/utils/compressor'; 
 import {
+  getCurrentTimeHHMMWIB,
+  normalizeAttendanceTimeInput,
+  toAttendanceTimeForDb,
+} from '../../../shared/utils/attendanceTime';
+import {
   fetchAbsensiByTanggal,
   fetchActiveStudentsByKelas,
   upsertBulkAbsensi,
@@ -23,6 +28,8 @@ const HalamanAbsen = ({ user }) => {
   const [absensi, setAbsensi] = useState({});
   const [sudahAbsenData, setSudahAbsenData] = useState({}); 
   const [isLibur, setIsLibur] = useState(false);
+
+  const defaultLateTimeValue = getCurrentTimeHHMMWIB();
 
   const fetchData = useCallback(async () => {
     try {
@@ -103,11 +110,36 @@ const HalamanAbsen = ({ user }) => {
     if (status === 'Kesiangan') {
       const { value: jam } = await Swal.fire({
         title: 'Jam Kedatangan',
-        html: '<input type="time" id="swal-input-jam" class="swal2-input" step="60">',
+        input: 'time',
+        inputLabel: 'Pilih jam kedatangan',
+        inputValue: defaultLateTimeValue,
+        customClass: {
+          popup: 'swal-time-picker-popup',
+          input: 'swal-time-picker-input',
+        },
+        inputAttributes: {
+          step: '60',
+          autocapitalize: 'off',
+          autocomplete: 'off',
+          autocorrect: 'off',
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Simpan',
         confirmButtonColor: '#2563eb',
-        preConfirm: () => document.getElementById('swal-input-jam').value
+        preConfirm: (value) => {
+          const normalized = normalizeAttendanceTimeInput(value);
+          if (!normalized) {
+            Swal.showValidationMessage('Format jam tidak valid. Gunakan HH:mm (contoh 07:35).');
+            return null;
+          }
+          return normalized;
+        },
       });
-      if (jam) setAbsensi({ ...absensi, [siswaId]: { status, jam_hadir: jam } });
+
+      const jamHadir = toAttendanceTimeForDb(jam);
+      if (!jamHadir) return;
+
+      setAbsensi((prev) => ({ ...prev, [siswaId]: { status, jam_hadir: jamHadir } }));
       return;
     }
 
@@ -128,7 +160,7 @@ const HalamanAbsen = ({ user }) => {
           const fileName = `${status}-${siswaId}-${Date.now()}.jpg`;
           
           const publicUrl = await uploadBuktiAbsen(fileName, compressedFile);
-          setAbsensi({ ...absensi, [siswaId]: { status, bukti_url: publicUrl } });
+          setAbsensi((prev) => ({ ...prev, [siswaId]: { status, bukti_url: publicUrl } }));
           Swal.close();
         } catch (err) {
           Swal.fire('Gagal', 'Gagal memproses gambar: ' + err.message, 'error');
@@ -137,7 +169,7 @@ const HalamanAbsen = ({ user }) => {
       return;
     }
 
-    setAbsensi({ ...absensi, [siswaId]: { status } });
+    setAbsensi((prev) => ({ ...prev, [siswaId]: { status } }));
   };
 
   const handleSimpanAbsensi = async () => {
