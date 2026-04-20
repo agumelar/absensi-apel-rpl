@@ -3,6 +3,7 @@ import { getSessionOrThrow } from './auth/sessionService';
 import { getTodayDateWIB } from './shared/dateService';
 import { getEvidencePolicyByStatus, isBusinessWeekdayWIBDate } from '../features/pembiasaan/utils/attendancePolicyRules';
 import { buildTeacherRecapRows } from '../features/pembiasaan/utils/executivePembiasaanReportRules';
+import { isJurusanScopedExecutiveReportRole } from '../features/pembiasaan/utils/executivePembiasaanScopeRules';
 
 const ACTIVITY_TYPES = {
   SAPA: 'sapa_pagi',
@@ -143,7 +144,7 @@ const assertExecutiveForPembiasaanOrThrow = () => {
 const resolveExecutiveScope = async () => {
   const session = assertExecutiveForPembiasaanOrThrow();
   const role = toRole(session.role);
-  if (role !== 'kaprog') {
+  if (!isJurusanScopedExecutiveReportRole(role)) {
     return { role, jurusanId: null, isJurusanScoped: false };
   }
 

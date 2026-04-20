@@ -25,3 +25,11 @@ test('guru mapel tanpa apel masuk mode multi-workspace mapel+pembiasaan', () => 
   assert.equal(flags.hasMultiWorkspace, true);
   assert.equal(flags.dashboardLink, APP_SWITCHER_ROUTE);
 });
+
+test('kaprog can view pembiasaan report like kepsek', () => {
+  const flagsKaprog = useUserRoleFlags({ role: 'kaprog' });
+  const flagsKepsek = useUserRoleFlags({ role: 'kepsek' });
+
+  assert.equal(flagsKaprog.canViewPembiasaanReport, true);
+  assert.equal(flagsKepsek.canViewPembiasaanReport, true);
+});
