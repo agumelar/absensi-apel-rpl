@@ -1,5 +1,15 @@
 {
   "mcpServers": {
+    "grep": {
+      "url": "https://mcp.grep.app"
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
     "firebase": {
       "command": "npx",
       "args": [

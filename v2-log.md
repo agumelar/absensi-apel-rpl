@@ -1417,5 +1417,570 @@ Petunjuk cepat:
 - Rekap KBM aktif dengan warning finalitas saat `totalBelumDiisi > 0` dan badge status `Final/Belum Final` pada hasil rekap.
 - Aksi `Perbaiki Data Bolong` ditambahkan di halaman rekap untuk memilih kombinasi sesi+siswa yang belum terisi lalu submit status `H/S/I/A` via `fillMissingAttendanceForSession`.
 - Service rekap kini mengembalikan daftar `missingEntries` agar UX backfill terarah (bukan input bebas) dan tetap sesuai kelas/mapel/periode aktif.
-- Export Excel kini memakai **dataset aktif saat ini** (tanpa re-query) dan menambahkan baris metadata di atas tabel: `kelas`, `mapel`, `periode`, `posting date`, `finalitas`.
+- Perbaikan export Excel lanjutan:
+  - akar masalah kolom kosong ditutup dengan exporter khusus `exportMapelRecapToExcel(...)` agar layout tidak lagi bergantung pada inferensi header baris pertama,
+  - metadata header disesuaikan menjadi: `Mapel`, `Kelas`, `Periode`, `Finalitas` (tanpa `posting date`),
+  - tabel export dikunci lengkap: `No`, `Nama`, `NIS`, `Total Pertemuan`, `H`, `S`, `I`, `A`, `% Kehadiran`, `Keterangan`,
+  - rule `Keterangan`: `Ada data yang kosong` jika `belum_diisi > 0`, selain itu `-`.
+- Validasi pasca perbaikan export:
+  - `npm run test:unit` lulus (`33/33`),
+  - `npm run lint` lulus.
 - Catatan dokumen desain tetap: `docs/superpowers/specs/2026-04-02-kbm-rekapitulasi-kehadiran-design.md`.
+
+## 67) Sprint 56 - Rekap Nilai Bonus KBM + Excel Export (Implemented)
+- Menindaklanjuti kebutuhan nilai harian yang bersifat **bonus keaktifan** (opsional), sehingga siswa tanpa nilai pada beberapa/semua pertemuan tidak dianggap data bolong.
+- Perbaikan domain rule rekap nilai:
+  - `src/features/mapel/utils/scoreRecapRules.js` (baru): agregasi rekap berbasis partisipasi bonus per siswa (`total_pertemuan`, `frekuensi_dinilai`, `coverage_persen`, `total_poin`, `rata_rata_saat_dinilai`, `keterangan`).
+  - rule penting:
+    - siswa tanpa nilai tetap valid (`frekuensi=0`, `total_poin=0`, `rata_rata='-'`),
+    - tidak ada auto-penalti seperti skema nilai wajib.
+- Perbaikan service rekap nilai periodik:
+  - `src/services/mapelService.js`:
+    - menambahkan `fetchMapelScoreRecap(...)` dengan pola filter yang konsisten dengan rekap kehadiran (`Kelas -> Mapel -> Periode`),
+    - data diambil on-demand dari `session` + `daily_score` + `siswa` sesuai akses guru,
+    - summary rekap disediakan untuk KPI (`totalSiswa`, `siswaDinilai`, `siswaBelumDinilai`, `rataRataCoverage`).
+- Perbaikan UI halaman Nilai Harian:
+  - `src/features/mapel/pages/MapelScorePage.jsx`:
+    - menambahkan section baru **Rekap Nilai Keaktifan (Bonus)**,
+    - filter periode (`Hari Ini/Bulanan/Rentang`) + filter `kelas/mapel`,
+    - tabel rekap menampilkan kolom: `Nama`, `NIS`, `Total Pertemuan`, `Frekuensi Dinilai`, `Cakupan Penilaian (%)`, `Total Poin`, `Rata-rata Saat Diberi Nilai`, `Keterangan`,
+    - menambahkan tombol `Download Excel Rekap` berbasis dataset rekap aktif.
+- Perbaikan export Excel khusus nilai bonus:
+  - `src/services/shared/excelService.js`:
+    - menambahkan exporter dedicated `exportMapelScoreRecapToExcel(...)` dengan kolom terkunci (tanpa inferensi header baris pertama),
+    - metadata header: `Kelas`, `Mapel`, `Periode`, `Total Pertemuan`, `Jenis Rekap`.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`33/33`),
+  - `npm run lint` lulus.
+- Penyempurnaan bahasa UX (operasional):
+  - istilah ringkasan/tabel/export dirapikan agar lebih jelas:
+    - `Coverage` -> `Cakupan Penilaian`,
+    - `Rata-rata Saat Dinilai` -> `Rata-rata Saat Diberi Nilai`,
+    - `Belum ada nilai` -> `Belum pernah dinilai`,
+    - `Aktif bonus` -> `Sudah pernah dinilai`.
+- Dokumen desain fitur nilai bonus:
+  - `docs/superpowers/specs/2026-04-03-kbm-rekap-nilai-bonus-design.md`.
+
+## 68) Sprint 57 - Split Halaman Penilaian Keaktifan vs Rekap (Implemented)
+- Menindaklanjuti evaluasi UX: halaman `Nilai` sebelumnya terlalu padat karena menggabungkan form input operasional dan analitik rekap periodik pada satu layar.
+- Keputusan implementasi:
+  - memisahkan menjadi dua halaman:
+    1. `Penilaian Keaktifan` (fokus input/simpan),
+    2. `Rekap Penilaian Keaktifan` (fokus filter periode, tabel rekap, export).
+- Routing dan navigasi:
+  - tambah route baru `MAPEL_SCORE_RECAP_ROUTE = '/mapel/rekap-penilaian-keaktifan'` di `src/shared/constants/routes.js`,
+  - register route page baru di `src/routes/AppRoutes.jsx`,
+  - update sidebar `src/app/AppShell.jsx`:
+    - `Nilai Harian` -> `Penilaian Keaktifan`,
+    - tambah menu `Rekap Penilaian Keaktifan`.
+- Perubahan halaman:
+  - `src/features/mapel/pages/MapelScorePage.jsx`:
+    - difokuskan ke input penilaian per sesi,
+    - section rekap periodik dipindahkan keluar,
+    - copy formal disesuaikan (`Simpan Penilaian`, `Daftar Penilaian Siswa`, dst).
+  - `src/features/mapel/pages/MapelScoreRecapPage.jsx` (baru):
+    - memuat filter `kelas/mapel/periode`,
+    - menampilkan KPI rekap (`Total Pertemuan`, `Siswa Dinilai`, `Belum Dinilai`, `Rata-rata Cakupan Penilaian`),
+    - menampilkan tabel rekap lengkap,
+    - menyediakan `Download Excel Rekap` berbasis dataset aktif.
+- Dashboard modul mapel:
+  - `src/features/mapel/pages/MapelHomePage.jsx` menambahkan kartu cepat terpisah untuk:
+    - `Penilaian Keaktifan`,
+    - `Rekap Penilaian Keaktifan`.
+- Validasi pasca split:
+  - `npm run lint` lulus,
+  - `npm run test:unit` lulus (`33/33`).
+
+## 69) Sprint 58 - Riwayat Sesi: Filter Kelas + Export Bulanan dengan Agenda (Implemented)
+- Menindaklanjuti kebutuhan pelaporan pimpinan: riwayat sesi kini bisa difilter berdasarkan kelas dan diexport untuk laporan bulanan.
+- Perubahan data/query:
+  - `src/services/mapelService.js`:
+    - `fetchSessionsByDateRange(...)` diperluas menerima `kelasId` (opsional),
+    - query riwayat menambahkan relasi `class_agenda(topik, metode)` agar agenda tersedia langsung di list.
+- Perubahan UI riwayat:
+  - `src/features/mapel/pages/MapelSessionHistoryPage.jsx`:
+    - tambah filter `Kelas` (default `Semua Kelas`),
+    - tambah shortcut periode: `Bulan Ini` dan `Bulan Lalu`,
+    - tambah tombol `Download Excel Riwayat`,
+    - tabel list menampilkan kolom agenda terpisah: `Topik` dan `Metode`.
+- Perubahan export Excel:
+  - `src/services/shared/excelService.js`:
+    - exporter dedicated baru `exportMapelSessionHistoryToExcel(...)`,
+    - metadata export: `Kelas`, `Periode`, `Total Sesi`,
+    - kolom export: `No`, `Tanggal`, `Kelas`, `Mapel`, `Topik`, `Metode`, `Status`, `Check-In`, `Check-Out`.
+- Utility baru untuk riwayat:
+  - `src/features/mapel/utils/sessionHistoryRules.js` (baru):
+    - helper rentang bulan (`buildMonthRangeByOffset`),
+    - helper format waktu lokal (`toLocalTimeLabel`),
+    - mapper baris excel riwayat (`buildSessionHistoryExcelRows`).
+  - `src/features/mapel/utils/sessionHistoryRules.test.mjs` (baru) untuk validasi helper.
+- Pembaruan test unit:
+  - `package.json` `test:unit` kini mencakup `sessionHistoryRules.test.mjs`.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`39/39`),
+  - `npm run lint` lulus.
+
+## 70) Sprint 59 - Riwayat Sesi: Status Distribusi Tugas Piket di UI + Excel (Implemented)
+- Menindaklanjuti kebutuhan monitoring pimpinan untuk sesi guru tidak masuk yang mengirim tugas: status distribusi oleh piket kini tampil eksplisit.
+- Perubahan data query:
+  - `src/services/mapelService.js`:
+    - `fetchSessionsByDateRange(...)` menambahkan relasi `teacher_absence_task(id, delivered_by_picket, delivered_at)`.
+- Perubahan rule/mapper:
+  - `src/features/mapel/utils/sessionHistoryRules.js`:
+    - menambahkan `resolveTaskDeliverySummary(row)` dengan output:
+      - `deliveryStatusLabel`: `Sudah Didistribusikan` / `Menunggu Distribusi` / `-`,
+      - `deliveryTimeLabel`: waktu lokal `id-ID` atau `-`.
+    - mapper excel `buildSessionHistoryExcelRows(...)` kini memasukkan:
+      - `Status Distribusi Tugas`,
+      - `Waktu Distribusi`.
+- Perubahan UI riwayat sesi:
+  - `src/features/mapel/pages/MapelSessionHistoryPage.jsx`:
+    - menambahkan kolom tabel:
+      - `Status Distribusi Tugas`,
+      - `Waktu Distribusi`.
+- Perubahan export Excel riwayat:
+  - `src/services/shared/excelService.js`:
+    - menambahkan dua kolom export:
+      - `Status Distribusi Tugas`,
+      - `Waktu Distribusi`.
+- Validasi test:
+  - `src/features/mapel/utils/sessionHistoryRules.test.mjs` ditambah skenario:
+    - task pending distribusi,
+    - task sudah didistribusikan.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`39/39`),
+  - `npm run lint` lulus.
+
+## 71) Sprint 60 - UX Penyajian Status Distribusi + Format Waktu Ringkas (Implemented)
+- Menindaklanjuti feedback UX agar status distribusi tugas lebih cepat dipindai pada tabel riwayat.
+- Perubahan UI:
+  - `src/features/mapel/pages/MapelSessionHistoryPage.jsx`:
+    - kolom `Status Distribusi Tugas` kini memakai badge warna:
+      - hijau: `Sudah Didistribusikan`,
+      - amber: `Menunggu Distribusi`,
+      - netral: `-`.
+- Perubahan format waktu:
+  - `src/features/mapel/utils/sessionHistoryRules.js`:
+    - helper `toLocalTimeLabel(...)` diringkas dari `HH.mm.ss` menjadi `HH.mm`.
+  - efeknya berlaku untuk tampilan waktu distribusi di UI dan Excel row mapping.
+- Validasi test:
+  - `src/features/mapel/utils/sessionHistoryRules.test.mjs` disesuaikan ke format `HH.mm`.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`39/39`),
+  - `npm run lint` lulus.
+
+## 72) Sprint 61 - Data Integrity Absensi: Cegah Siswa Lintas Kelas Masuk Session (Implemented)
+- Investigasi mismatch ringkasan absensi menunjukkan akar masalah bukan duplikasi `(session_id, siswa_id)`, tetapi data absensi lintas kelas (siswa dari kelas lain masuk ke session tertentu).
+- Hardening service write path:
+  - `src/services/mapelService.js`:
+    - `upsertStudentAttendanceMapel(...)` kini memvalidasi bahwa `siswa.kelas_id` harus sama dengan `session.schedule.kelas_id` sebelum upsert,
+    - `upsertBulkStudentAttendanceMapel(...)` kini menambahkan validasi lintas entry terhadap kelas session; bila mismatch ditemukan, request ditolak dengan error yang jelas.
+- Utility integrity baru:
+  - `src/features/mapel/utils/attendanceIntegrityRules.js` (baru):
+    - builder map kelas session/siswa,
+    - detector mismatch pertama untuk payload absensi.
+  - `src/features/mapel/utils/attendanceIntegrityRules.test.mjs` (baru) untuk validasi rule.
+- SQL pendukung audit/cleanup data historis:
+  - `supabase/audit_attendance_cross_class.sql` (audit row absensi lintas kelas),
+  - `supabase/fix_attendance_cross_class_delete.sql` (cleanup delete + verifikasi sisa row).
+- Pembaruan suite test unit:
+  - `package.json` `test:unit` mencakup test integrity baru.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`42/42`),
+  - `npm run lint` lulus.
+
+## 73) Sprint 62 - DB Guard: Trigger Validasi Kelas Siswa vs Kelas Session (Implemented)
+- Menambahkan guard di level database sebagai pagar terakhir agar data absensi lintas kelas tidak bisa masuk meskipun ada request langsung/manual di luar flow frontend.
+- Migration SQL baru:
+  - `supabase/migrations/enforce_attendance_same_class.sql`
+  - isi:
+    - function `public.validate_student_attendance_same_class()` (PL/pgSQL),
+    - trigger `trg_validate_student_attendance_same_class` pada `public.student_attendance_mapel` (`before insert or update`).
+- SQL Editor helper (siap copy-paste):
+  - `supabase/enforce_attendance_same_class.sql`.
+- Validasi pasca penambahan file migration:
+  - `npm run test:unit` lulus (`42/42`),
+  - `npm run lint` lulus.
+
+## 74) Sprint 63 - Executive KPI Contract Alignment for Teacher Performance + Audit Trail (In Progress)
+- Menjalankan alignment sprint executive dengan fokus **hanya** pada:
+  - `Teacher Performance`,
+  - `Audit Trail Mapel`.
+- `Executive Control` untuk `kesiswaan` tetap tidak diubah (out of scope).
+- Perubahan inti yang sudah dikerjakan:
+  - menambah utility KPI baru:
+    - `src/features/dashboard/utils/executiveKpiRules.js`
+    - `src/features/dashboard/utils/executiveKpiRules.test.mjs`
+  - menambah scope resolver role-aware di service:
+    - `kaprog` dibatasi jurusan (`jurusan_id`) sendiri,
+    - `kepsek` dan `kurikulum` tetap global.
+  - menambah dataset KPI terpusat `fetchExecutiveMapelKpiDataset(...)` sebagai kontrak tunggal untuk ringkasan KPI/trend/alert.
+  - `TeacherPerformancePage` disambungkan ke kontrak KPI baru + panel KPI tambahan (Tidak Masuk, SLA Breach, Kelas Terdampak) + alert tindak lanjut + export Excel dedicated.
+  - `MapelAuditTrailPage` ditambah KPI context strip berbasis kontrak yang sama + export beralih ke exporter dedicated agar konsisten dengan dataset aktif.
+  - menambah exporter dedicated di `excelService`:
+    - `exportTeacherPerformanceToExcel(...)`
+    - `exportMapelAuditSessionSummaryToExcel(...)`.
+- Validasi sementara:
+  - `npm run test:unit` lulus (`46/46`),
+  - `npm run lint` lulus,
+  - `npm run build` lulus (dengan warning minor Node `22.10.0` vs rekomendasi `22.12+`).
+- Penyempurnaan lanjutan (UI consistency + metric precision):
+  - `src/services/mapelService.js`:
+    - metrik `check_in_sessions` dan `check_out_sessions` kini dihitung dari `waktu_check_in` / `waktu_check_out` aktual,
+    - `check_out_rate` per guru kini berbasis `check_out_sessions / check_in_sessions`,
+    - summary `totalCheckIns` dan `totalCheckOuts` kini memakai agregasi aktual,
+    - rule `SLA breach` diperketat:
+      - tanggal lampau: breach jika tidak ada check-in,
+      - tanggal hari ini: breach mengikuti jendela SLA menit berjalan.
+  - `src/features/dashboard/pages/TeacherPerformancePage.jsx`:
+    - tambah badge executive (`Scope`, `Alert SLA`, `Titik Tren`),
+    - tambah panel `Preview Tren (8 titik terakhir)` dengan indikator presence/late,
+    - tambah panel `Kelas Terdampak (harian)`.
+  - `src/features/mapel/pages/MapelAuditTrailPage.jsx`:
+    - KPI context di-upgrade agar visual konsisten dengan `Teacher Performance` (badge + KPI cards),
+    - mempertahankan karakter utama audit trail yang tetap session-centric.
+- Penyederhanaan kebutuhan executive (iterasi kurikulum):
+  - `Teacher Performance` direstruktur menjadi 2 tab:
+    - `Monitor Hari Ini` (jadwal + SLA + check-in/out + agenda + H/S/I/A + status tugas saat tidak masuk),
+    - `Rekap Bulanan + Riwayat` (metrik bulanan per guru + riwayat tanggal).
+  - Menambahkan export 1 file Excel multi-sheet untuk kebutuhan rapat:
+    - `Rekap_Bulanan`,
+    - `Monitor_Hari_Ini`,
+    - `Riwayat_Detail`,
+    - `Guru_Tidak_Masuk_Detail`.
+  - Menambahkan filter kelas pada tab rekap bulanan dan memastikan query backend menerima `kelasId` agar filtering valid di source data.
+  - Memperbaiki akses monitoring untuk role executive:
+    - menambah service `fetchExecutiveDailyMonitoring(...)` agar `kaprog/kurikulum/kepsek` tidak terblokir guard piket.
+  - Normalisasi format jam menjadi konsisten `HH:mm` (WIB) di UI dan Excel:
+    - update `TeacherPerformancePage`,
+    - update `MapelSessionHistoryPage`,
+    - update helper waktu `toLocalTimeLabel`,
+    - update formatter waktu pada `excelService`.
+
+## 75) Sprint 64 - Workspace Pembiasaan (Core Foundation + Routing + Role TU) (Implemented)
+- Menambahkan fondasi backend Supabase untuk workspace pembiasaan:
+  - migration core schema: `pembiasaan_settings`, `sapa_pagi_schedule`, `pembiasaan_attendance`,
+  - helper function jarak/scope role di schema `app`.
+- Menambahkan migration RPC operasional pembiasaan:
+  - `fn_submit_sapa_pagi`,
+  - `fn_submit_pembiasaan`,
+  - `fn_finalize_auto_alpha`,
+  - `fn_cleanup_pembiasaan_photo_retention`.
+- Menambahkan migration RLS + reporting views:
+  - policy self-access peserta,
+  - policy admin manage,
+  - policy executive read dengan batas jurusan untuk `kaprog`,
+  - views ringkas/rekap/riwayat pembiasaan.
+- Menambahkan role baru `tu` pada manajemen user:
+  - whitelist role import/save ditambah `tu`,
+  - opsi dropdown role ditambah `TU`.
+- Menambahkan route + menu workspace Pembiasaan:
+  - route: dashboard/sapa pagi/pembiasaan/admin jadwal/admin pengaturan/laporan executive,
+  - app switcher menampilkan kartu workspace `Pembiasaan`,
+  - sidebar menampilkan menu operasional pembiasaan + menu admin pembiasaan saat role admin.
+- Menambahkan service pembiasaan dan halaman awal:
+  - `pembiasaanService` (settings, schedule, submit, finalize, report),
+  - halaman: `PembiasaanDashboardPage`, `SapaPagiPage`, `PembiasaanPage`,
+  - halaman admin: `AdminSapaPagiSchedulePage`, `AdminPembiasaanSettingsPage`,
+  - halaman executive: `ExecutivePembiasaanReportPage`.
+- Validasi pasca perubahan:
+  - `npm run lint` lulus,
+  - `npm run build` lulus (warning minor Node version tetap ada).
+- Hardening lanjutan:
+  - peningkatan UX submit GPS/kamera di `pembiasaanService` (retry lokasi + pesan error izin kamera/lokasi lebih spesifik),
+  - export laporan pembiasaan diubah ke 1 file multi-sheet (`Dashboard_Ringkas`, `Rekap_Sapa_Pagi`, `Rekap_Pembiasaan`, `Riwayat_Detail`),
+  - menambahkan dokumen QA role matrix + SQL verifikasi di:
+    - `docs/superpowers/specs/2026-04-04-pembiasaan-role-qa-checklist.md`.
+  - penyelarasan routing login role tunggal agar tidak masuk portal:
+    - `admin` langsung ke dashboard admin,
+    - `piket` langsung ke dashboard piket,
+    - rule multi-workspace di `useUserRoleFlags` kini mengecualikan `admin` dan `piket`.
+  - menambahkan dokumen smoke-test cepat login routing role:
+    - `docs/superpowers/specs/2026-04-04-smoke-test-login-routing.md`.
+  - peningkatan UX jadwal sapa pagi:
+    - tambah aksi cepat `Pilih Semua Hasil` dan `Kosongkan Pilihan`.
+  - hotfix RLS pembiasaan untuk model session aplikasi saat ini (non Supabase Auth JWT):
+    - menambahkan migration `20260404_fix_pembiasaan_rls_for_app_session.sql` agar operasi CRUD tidak ditolak policy,
+    - role check tetap dijaga di layer service/frontend sesuai guard aplikasi.
+  - hotfix permission Supabase untuk schema helper `app`:
+    - menambahkan migration grant usage/execute agar policy dan function yang memanggil `app.*` tidak gagal di runtime,
+    - file: `supabase/migrations/20260404_grant_app_schema_permissions.sql`.
+
+## 76) Sprint 65 - KBM GPS Radius Enforcement End-to-End (Implemented)
+- Menuntaskan enforcement GPS pada flow `Sesi & Absensi` agar check-in/check-out KBM mengikuti aturan radius sekolah seperti workspace pembiasaan.
+- Keputusan produk yang dipakai: **strict mode** (aksi diblok jika lokasi gagal diakses/ditolak/tidak valid).
+- Perubahan utama:
+  - `src/features/mapel/pages/MapelSessionPage.jsx`:
+    - menambahkan resolver geolokasi browser (`enableHighAccuracy`, `timeout`, `maximumAge`) dengan retry ringan,
+    - menambahkan mapping error geolokasi ke pesan operasional yang lebih jelas,
+    - payload `geo` kini selalu dikirim saat `checkInSession` dan `checkOutSession`.
+  - `src/features/mapel/utils/sessionGeoRules.js` (baru):
+    - helper validasi koordinat,
+    - konstanta pesan error geolokasi,
+    - mapper kode error geolocation -> pesan user-friendly.
+  - `src/features/mapel/utils/sessionGeoRules.test.mjs` (baru):
+    - unit test untuk validasi koordinat dan pemetaan error geolokasi.
+  - `package.json`:
+    - script `test:unit` diperbarui agar mencakup `sessionGeoRules.test.mjs`.
+- Dampak:
+  - `checkIn/checkOut` KBM sekarang benar-benar end-to-end memerlukan koordinat valid.
+  - Jika izin lokasi ditolak atau GPS tidak tersedia, user mendapat error terarah dan aksi tidak dilanjutkan.
+  - Policy radius tetap diputuskan di service layer (`mapelService`), sehingga frontend hanya menjadi pengumpul koordinat + pemberi feedback.
+- Validasi pasca implementasi:
+  - `node --test src/features/mapel/utils/sessionGeoRules.test.mjs` lulus,
+  - `npm run test:unit` lulus (`56/56`),
+  - `npm run lint` lulus.
+
+## 77) Sprint 66 - Workspace Rule Executive vs Pembiasaan + Kepsek Direct Executive (Implemented)
+- Menyelaraskan perilaku workspace untuk role executive agar sesuai kebutuhan operasional sekolah:
+  - `kaprog`, `kurikulum`, `kesiswaan` tetap bisa berperan ganda:
+    - saat memilih workspace manajemen/executive -> menggunakan menu executive,
+    - saat memilih workspace pembiasaan -> berperan sebagai partisipan pembiasaan sesuai jadwal.
+  - `kepsek` diperlakukan khusus:
+    - langsung ke executive dashboard,
+    - tidak masuk alur multi-workspace/portal,
+    - tidak ikut role partisipan pembiasaan.
+- Perubahan teknis:
+  - `src/shared/constants/roles.js`:
+    - menghapus `kepsek` dari `PEMBIASAAN_PARTICIPANT_ROLES`.
+  - `src/app/hooks/useUserRoleFlags.js`:
+    - menambahkan flag `isKepsek`,
+    - memaksa `hasMultiWorkspace = false` untuk `kepsek`,
+    - menjaga `singleWorkspaceRoute` kepsek ke `DASHBOARD_ROUTE`.
+- Dampak:
+  - pemisahan konteks menu executive vs pembiasaan menjadi lebih presisi,
+  - mencegah kepsek terseret ke flow workspace partisipan yang bukan target utama.
+- Validasi pasca implementasi:
+  - `npm run lint` lulus,
+  - `npm run test:unit` lulus (`56/56`).
+
+## 78) Sprint 67 - Fix Sidebar Context Leakage pada Laporan Pembiasaan (Implemented)
+- Menindaklanjuti bug UX pada role executive: saat membuka `Laporan Pembiasaan`, sidebar berubah ke menu operasional pembiasaan (Dashboard/Sapa Pagi/Pembiasaan), padahal harus tetap konteks executive.
+- Akar masalah:
+  - deteksi workspace di shell menggunakan rule prefix umum `pathname.startsWith('/pembiasaan')`, sehingga route laporan (`/pembiasaan/laporan`) ikut terbaca sebagai workspace operasional pembiasaan.
+- Perbaikan:
+  - `src/app/utils/workspaceContextRules.js` (baru):
+    - menambahkan resolver konteks route terpusat,
+    - mengecualikan `PEMBIASAAN_REPORT_ROUTE` dari `isPembiasaanWorkspace`.
+  - `src/app/AppShell.jsx`:
+    - migrasi logic context route agar memakai `getWorkspaceContext(...)`.
+  - `src/app/utils/workspaceContextRules.test.mjs` (baru):
+    - test khusus memastikan `/pembiasaan/laporan` tidak dianggap workspace operasional pembiasaan,
+    - test memastikan route operasional pembiasaan tetap terdeteksi benar.
+  - `package.json`:
+    - script `test:unit` diperbarui agar mencakup test context baru.
+- Dampak:
+  - klik menu `Laporan Pembiasaan` dari konteks executive kini menjaga sidebar tetap pada menu executive (konsisten seperti `Teacher Performance`).
+  - workspace pembiasaan operasional untuk partisipan tetap berjalan normal.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`58/58`),
+  - `npm run lint` lulus.
+
+## 79) Sprint 68 - Policy Pembiasaan Status-Aware + Weekday-Only + Auto-Alpha Cron (Implemented)
+- Menyelaraskan aturan pembiasaan sesuai kebijakan operasional sekolah:
+  - `hadir` tetap **wajib GPS/radius sekolah + foto**,
+  - `izin/sakit` menjadi **wajib catatan**, tanpa kewajiban GPS/foto,
+  - operasional pembiasaan dibatasi **Senin-Jumat**.
+- Perubahan frontend service:
+  - `src/services/pembiasaanService.js` kini memakai policy status terpusat,
+  - validasi submit diubah menjadi conditional per status,
+  - submit `izin/sakit` tidak lagi memaksa akses GPS/kamera,
+  - submit pada Sabtu/Minggu ditolak di layer service.
+- Penambahan utilitas rule + test:
+  - `src/features/pembiasaan/utils/attendancePolicyRules.js`,
+  - `src/features/pembiasaan/utils/attendancePolicyRules.test.mjs`,
+  - script `test:unit` diperbarui untuk memasukkan test baru.
+- Perubahan UX halaman operasional:
+  - `SapaPagiPage` dan `PembiasaanPage` diperjelas copy-nya agar konsisten dengan kebijakan baru (hadir strict, izin/sakit catatan saja, weekday-only).
+- Perubahan database (migration baru):
+  - `supabase/migrations/20260405_update_pembiasaan_policy_weekday_and_status_evidence.sql`:
+    - update `sapa_pagi_schedule_hari_check` menjadi Senin-Jumat,
+    - update `fn_submit_sapa_pagi` dan `fn_submit_pembiasaan` agar validasi GPS/foto hanya untuk `hadir`,
+    - update `fn_finalize_auto_alpha` agar skip Sabtu/Minggu,
+    - menambahkan scheduling `pg_cron` weekday untuk auto-alpha:
+      - `06:31` WIB (`sapa_pagi` window),
+      - `07:01` WIB (`pembiasaan` window).
+- Dampak:
+  - izin/sakit bisa dilaporkan dari mana saja sesuai kebutuhan nyata saat tidak bisa hadir ke sekolah,
+  - alpha otomatis tidak lagi menunggu trigger laporan executive,
+  - Sabtu/Minggu tidak menghasilkan aktivitas pembiasaan/alpha.
+- Validasi pasca implementasi:
+  - `node --test src/features/pembiasaan/utils/attendancePolicyRules.test.mjs` lulus,
+  - `npm run test:unit` lulus,
+  - `npm run lint` lulus,
+  - `npm run build` lulus.
+
+## 80) Sprint 69 - Executive Pembiasaan 2 Tab + Kalender Sekolah (Implemented)
+- Menyederhanakan pengalaman executive pada `Laporan Pembiasaan` menjadi dua tab fokus:
+  - `Monitoring Harian`: siapa submit, status, jam, aktivitas, jarak, catatan,
+  - `Rekap Guru`: H/I/S/A, total aktual, total kewajiban, dan kepatuhan (%).
+- Menambahkan utilitas transform data khusus executive report:
+  - `src/features/pembiasaan/utils/executivePembiasaanReportRules.js`,
+  - test: `src/features/pembiasaan/utils/executivePembiasaanReportRules.test.mjs`.
+- Menambahkan fondasi kalender sekolah sebagai sumber hari non-aktif:
+  - migration: `supabase/migrations/20260405_create_school_calendar_and_rekap_helpers.sql`,
+  - tabel `public.school_calendar`,
+  - helper SQL `fn_is_school_active_day` dan `fn_count_school_active_days`.
+- Menyambungkan service executive pembiasaan ke kalender sekolah:
+  - `src/services/pembiasaanService.js` kini menghasilkan dataset khusus tab (`monitoringRows`, `recapRows`),
+  - kalkulasi `total_kewajiban` berbasis weekday aktif dikurangi tanggal libur sekolah,
+  - tetap mengikuti scope role (global/jurusan).
+- Penyempurnaan scope data executive:
+  - role `kepsek`, `piket`, dan `admin` dikecualikan dari dataset Monitoring Harian dan Rekap Guru agar laporan fokus ke peserta operasional.
+- Menyesuaikan auto-alpha agar skip hari non-aktif sekolah:
+  - update `fn_finalize_auto_alpha` untuk menghentikan insert jika `fn_is_school_active_day(target_date) = false`.
+- Menyesuaikan export laporan mengikuti tab aktif:
+  - tab monitoring -> sheet `Monitoring_Harian`,
+  - tab rekap -> sheet `Rekap_Guru`,
+  - tetap menyertakan `Dashboard_Ringkas` + `Riwayat_Detail`.
+- Dokumentasi QA diperbarui untuk matrix uji 2 tab + kalender sekolah.
+- Validasi pasca implementasi:
+  - `node --test src/features/pembiasaan/utils/executivePembiasaanReportRules.test.mjs` lulus,
+  - `npm run test:unit` lulus,
+  - `npm run lint` lulus,
+  - `npm run build` lulus.
+
+## 81) Sprint 70 - Kalender Sekolah Dipusatkan di Dashboard Admin (Implemented)
+- Menindaklanjuti keputusan UX: menu `Kalender Sekolah` dipindah menjadi menu admin terpusat (bukan route admin di workspace pembiasaan).
+- Perubahan routing dan menu:
+  - menambah route global admin `ADMIN_SCHOOL_CALENDAR_ROUTE` (`/admin/kalender-sekolah`),
+  - menambah item menu `Kalender Sekolah` pada `navAdmin` di shell aplikasi.
+- Menambahkan halaman admin kalender sekolah:
+  - file: `src/features/admin/pages/AdminSchoolCalendarPage.jsx`,
+  - fitur: list, upsert per tanggal (status aktif/libur + keterangan), hapus tanggal,
+  - sumber data: tabel `public.school_calendar`.
+- Dampak:
+  - admin memiliki satu pintu pengelolaan hari non-aktif sekolah untuk seluruh logic absensi,
+  - area pembiasaan tetap fokus ke operasional pembiasaan, tanpa menu kalender khusus.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus,
+  - `npm run lint` lulus,
+  - `npm run build` lulus.
+
+## 82) Sprint 71 - Integrasi Kalender Sekolah ke Rekap Mapel (Implemented)
+- Menjalankan rollout phase-5 langkah pertama (opsi B): modul mapel terlebih dahulu.
+- Menambahkan utilitas aturan hari sekolah pada layer mapel:
+  - `src/features/mapel/utils/schoolDayRules.js`,
+  - test: `src/features/mapel/utils/schoolDayRules.test.mjs`.
+- Menambahkan helper service untuk mengambil tanggal libur sekolah pada rentang periode:
+  - `fetchSchoolHolidaySetInRange` di `src/services/mapelService.js`.
+- Integrasi filter hari aktif sekolah di rekap mapel:
+  - `fetchMapelAttendanceRecap` kini hanya menghitung sesi pada hari aktif sekolah,
+  - `fetchMapelScoreRecap` kini hanya menghitung sesi pada hari aktif sekolah,
+  - KPI executive mapel (`rows` dasar) juga mengecualikan sesi weekend/libur sekolah sebelum agregasi.
+- Dampak:
+  - denominator rekap mapel tidak lagi memasukkan tanggal libur sekolah,
+  - metrik sesi/kinerja mapel lebih konsisten dengan policy kalender sekolah.
+- Validasi pasca implementasi:
+  - `node --test src/features/mapel/utils/schoolDayRules.test.mjs` lulus,
+  - `npm run test:unit` lulus,
+  - `npm run lint` lulus,
+  - `npm run build` lulus.
+
+## 83) Sprint 72 - Sinkronisasi Executive Dashboard/Report Mapel dengan Kalender Sekolah (Implemented)
+- Menuntaskan phase-5 langkah berikutnya: executive dashboard/report mapel kini konsisten mengecualikan hari libur sekolah.
+- Perubahan service layer (`src/services/mapelService.js`):
+  - `fetchExecutiveDailyMonitoring` return kosong pada tanggal non-hari-aktif sekolah,
+  - `fetchGuruKosongEws` return kosong pada tanggal non-hari-aktif sekolah,
+  - `fetchMapelAuditSessionSummary` kini memfilter sesi berdasarkan hari aktif sekolah sebelum pagination + agregasi.
+- Perubahan report/export layer:
+  - `TeacherPerformancePage` menambahkan metadata kebijakan libur di export,
+  - `MapelAuditTrailPage` menambahkan metadata kebijakan libur di export.
+- Dampak:
+  - angka sesi, rekap, dan ringkasan executive mapel sinkron dengan policy kalender sekolah,
+  - tidak ada mismatch antar halaman executive karena hari libur terhitung sebagai sesi wajib.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus,
+  - `npm run lint` lulus,
+  - `npm run build` lulus.
+
+## 84) Sprint 73 - Hardening Operasional Kalender Sekolah (Implemented)
+- Menambahkan dokumen operasional agar policy kalender sekolah terjaga konsisten lintas modul.
+- Dokumen baru:
+  - `docs/superpowers/specs/2026-04-05-school-calendar-admin-sop-and-weekly-audit.md`
+- Isi utama dokumen:
+  - SOP admin bulanan/mingguan untuk update kalender sekolah,
+  - checklist audit mingguan lintas pembiasaan + mapel + executive + export,
+  - query sampling historis SQL untuk validasi policy libur,
+  - alur mitigasi jika hasil audit menemukan anomali.
+- Dampak:
+  - transisi dari implementasi teknis ke kontrol operasional yang repeatable,
+  - memudahkan audit dan penelusuran mismatch data secara proaktif.
+
+## 85) Sprint 74 - Guru Mapel Multi-Workspace: Pulihkan Akses Pembiasaan (Implemented)
+- Menindaklanjuti isu akses: akun `guru mapel` tidak melihat workspace `Pembiasaan`, sehingga tidak bisa absen pembiasaan.
+- Akar masalah:
+  - kalkulasi `hasMultiWorkspace` sebelumnya hanya menganggap kombinasi yang melibatkan `Apel`, sehingga kombinasi `Mapel + Pembiasaan` tidak pernah dianggap multi-workspace.
+  - role `guru_mapel` belum terdaftar sebagai partisipan pembiasaan pada konstanta role.
+- Perbaikan:
+  - `src/shared/constants/roles.js`:
+    - menambahkan `guru_mapel` ke `PEMBIASAAN_PARTICIPANT_ROLES`.
+  - `src/app/hooks/useUserRoleFlags.js`:
+    - menyederhanakan perhitungan multi-workspace berbasis jumlah capability aktif (`apel`, `mapel`, `pembiasaan`) dengan aturan `>= 2`,
+    - menjaga pengecualian existing untuk `kepsek`, `admin`, `piket`,
+    - merapikan import ESM agar kompatibel untuk unit test Node (`.js` extension).
+  - menambahkan test baru:
+    - `src/app/hooks/useUserRoleFlags.test.mjs` untuk memastikan:
+      - `guru_mapel` mendapat akses pembiasaan,
+      - `guru + is_guru_mapel=true` masuk mode multi-workspace dan diarahkan ke `Portal Workspace`.
+  - `package.json`:
+    - script `test:unit` diperbarui agar menjalankan test `useUserRoleFlags`.
+- Dampak:
+  - user `guru mapel` kini bisa memilih workspace `KBM` atau `Pembiasaan` dari portal sesuai kebutuhan harian,
+  - akses absen pembiasaan untuk guru mapel kembali berjalan.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`74/74`),
+  - `npm run lint` lulus.
+
+## 86) Sprint 75 - Portal Workspace Leak Fix untuk Guru Mapel (Implemented)
+- Menindaklanjuti kebocoran akses di halaman portal: akun guru mapel yang seharusnya hanya punya 2 workspace (`KBM` + `Pembiasaan`) masih melihat kartu `Manajemen Absen`.
+- Akar masalah:
+  - kartu portal sebelumnya dirender statis (3 kartu selalu tampil), tidak mengikuti capability role.
+- Perbaikan:
+  - `src/features/dashboard/utils/workspacePortalRules.js` (baru):
+    - menambahkan builder `buildWorkspacePortalItems(...)` untuk menyusun kartu portal berdasarkan capability aktif.
+  - `src/features/dashboard/pages/PortalWorkspacePage.jsx`:
+    - render kartu workspace diubah menjadi conditional berbasis output builder,
+    - menambahkan dukungan prop `canAccessApelWorkspace`,
+    - grid kolom dibuat adaptif mengikuti jumlah kartu aktif (1/2/3 kartu).
+  - `src/routes/AppRoutes.jsx`:
+    - meneruskan flag `canAccessApelWorkspace` ke `PortalWorkspacePage`.
+  - test baru:
+    - `src/features/dashboard/utils/workspacePortalRules.test.mjs`:
+      - memastikan `guru mapel` hanya melihat `KBM` + `Pembiasaan`,
+      - memastikan role dengan akses lengkap tetap melihat 3 workspace.
+  - `package.json`:
+    - script `test:unit` diperbarui agar memasukkan test portal rules.
+- Dampak:
+  - kebocoran kartu `Manajemen Absen` untuk role guru mapel tertutup,
+  - portal kini konsisten menampilkan hanya workspace yang benar-benar dapat diakses user.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`76/76`),
+  - `npm run lint` lulus.
+
+## 87) Sprint 76 - Sinkronisasi Pesan Hari Libur di Semua Workspace Input Absensi (Implemented)
+- Menindaklanjuti kebutuhan operasional: saat hari libur/non-aktif sekolah, seluruh halaman input absensi lintas workspace menampilkan pesan seragam.
+- Implementasi gate hari aktif terpusat:
+  - `src/services/shared/attendanceDayService.js` (baru):
+    - menambahkan helper `getAttendanceDayStatus(...)` dan `isAttendanceDayActive(...)`,
+    - aturan hari aktif: hanya Senin-Jumat dan bukan tanggal `is_libur = true` di tabel `school_calendar`,
+    - menambahkan konstanta pesan seragam `ATTENDANCE_DAY_OFF_MESSAGE`: `Tidak ada aktifitas absensi hari ini, selamat berlibur`.
+  - `src/services/shared/attendanceDayService.test.mjs` (baru):
+    - test untuk skenario weekend, holiday kalender sekolah, hari aktif, dan error query.
+  - `package.json`:
+    - script `test:unit` diperbarui agar memasukkan test service baru.
+- Integrasi ke halaman input absensi lintas workspace:
+  - `src/features/absensi/pages/HalamanAbsenPage.jsx` (Wali Kelas),
+  - `src/features/piket/pages/PiketAbsensiGlobalPage.jsx` (Piket),
+  - `src/features/mapel/pages/MapelSessionPage.jsx` (KBM/Mapel),
+  - `src/features/pembiasaan/pages/SapaPagiPage.jsx` dan `src/features/pembiasaan/pages/PembiasaanPage.jsx` (Pembiasaan).
+- Penyesuaian teknis pendukung kompatibilitas Node test runner:
+  - `src/services/supabase/client.js` dan `src/demo/mockSupabase.js` dirapikan import ESM dengan ekstensi `.js` agar unit test service shared dapat dieksekusi stabil.
+- Dampak:
+  - perilaku hari libur menjadi konsisten di semua workspace input absensi,
+  - mencegah input absensi saat hari non-aktif sekolah,
+  - pengalaman user lintas role lebih seragam dan minim kebingungan.
+- Validasi pasca implementasi:
+  - `npm run test:unit` lulus (`80/80`),
+  - `npm run lint` lulus,
+  - `npm run build` lulus (dengan warning environment Node `22.10.0` < rekomendasi Vite `22.12+`, serta warning chunk size non-blocking).
