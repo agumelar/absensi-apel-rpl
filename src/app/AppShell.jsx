@@ -25,6 +25,7 @@ import {
   ClipboardList,
   Hand,
   CalendarClock,
+  CalendarOff,
   Settings,
 } from 'lucide-react';
 import {
@@ -51,6 +52,7 @@ import Button from '../shared/ui/Button';
 import { cn } from '../shared/ui/cn';
 import { isDemoMode, disableDemoMode } from '../demo/demoMode';
 import { getWorkspaceContext } from './utils/workspaceContextRules';
+import useAttendanceDayStatus from './hooks/useAttendanceDayStatus';
 
 const navBaseClass =
   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200';
@@ -92,6 +94,7 @@ const AppShell = ({
 }) => {
   const location = useLocation();
   const isDemo = isDemoMode();
+  const { isDayOff, message: dayOffMessage } = useAttendanceDayStatus();
   const { isMapelWorkspace, isPembiasaanWorkspace } = getWorkspaceContext(location.pathname);
   const isKesiswaanRole = userRole === 'kesiswaan';
   const isKurikulumRole = userRole === 'kurikulum';
@@ -395,6 +398,15 @@ const AppShell = ({
         </header>
 
         <div className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-8">
+          {isDayOff && (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+              <CalendarOff size={18} className="shrink-0 text-amber-600" />
+              <div className="flex-1 min-w-0">
+                <span className="font-bold text-amber-800">HARI LIBUR</span>
+                <span className="ml-2 text-amber-700">{dayOffMessage}</span>
+              </div>
+            </div>
+          )}
           {isDemo && (
             <div className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
               <FlaskConical size={18} className="shrink-0 text-amber-600" />

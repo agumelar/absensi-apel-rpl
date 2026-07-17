@@ -30,3 +30,17 @@ skema.md
 *.njsproj
 *.sln
 *.sw?
+
+# Internal dev & AI process artifacts (disimpan lokal, tidak untuk repo publik)
+.kiro/
+.agents/
+.idx/
+docs/
+blueprint.md
+v2-log.md
+AGENTS.md
+GEMINI.md
+opencode.json
+
+# Database migrations & scripts (skema/RLS disimpan privat)
+supabase/
