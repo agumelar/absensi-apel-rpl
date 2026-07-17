@@ -11,7 +11,7 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
 
-          if (id.includes('exceljs')) return 'vendor-excel';
+          if (id.includes('exceljs') || id.includes('jszip')) return 'vendor-excel';
           if (id.includes('html5-qrcode')) return 'vendor-qr';
           if (id.includes('recharts')) return 'vendor-chart';
           if (id.includes('@supabase')) return 'vendor-supabase';

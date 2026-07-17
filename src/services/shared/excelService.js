@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 
 const normalizeHeaderKey = (header) =>
   String(header || '')
@@ -6,6 +7,176 @@ const normalizeHeaderKey = (header) =>
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[^a-z0-9_]/g, '');
+
+// Parser CSV sederhana yang menghormati tanda kutip ganda ("..."), koma di dalam
+// kutip, escape "" , serta pemisah baris CRLF/LF. Mengembalikan matriks string.
+const parseCsvText = (text) => {
+  const records = [];
+  let field = '';
+  let record = [];
+  let inQuotes = false;
+
+  const pushField = () => {
+    record.push(field);
+    field = '';
+  };
+  const pushRecord = () => {
+    pushField();
+    records.push(record);
+    record = [];
+  };
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      pushField();
+    } else if (ch === '\r') {
+      // Abaikan CR; tangani baris pada LF.
+    } else if (ch === '\n') {
+      pushRecord();
+    } else {
+      field += ch;
+    }
+  }
+  // Baris terakhir tanpa newline penutup.
+  if (field !== '' || record.length > 0) {
+    pushRecord();
+  }
+
+  return records;
+};
+
+// Ubah matriks (array of array) menjadi array objek: baris pertama = header
+// (dinormalisasi snake_case), baris berikutnya = data. Baris seluruhnya kosong diabaikan.
+const matrixToRecords = (matrix) => {
+  const filtered = (Array.isArray(matrix) ? matrix : []).filter((row) =>
+    row.some((cell) => String(cell ?? '').trim() !== ''),
+  );
+  if (filtered.length === 0) return [];
+
+  const headers = filtered[0].map((h) => normalizeHeaderKey(h));
+  const rows = [];
+  for (let r = 1; r < filtered.length; r += 1) {
+    const record = {};
+    let hasValue = false;
+    filtered[r].forEach((value, index) => {
+      const key = headers[index];
+      if (!key) return;
+      const cleaned = String(value ?? '').trim();
+      if (cleaned !== '') hasValue = true;
+      record[key] = cleaned;
+    });
+    if (hasValue) rows.push(record);
+  }
+  return rows;
+};
+
+const decodeXmlEntities = (value) =>
+  String(value ?? '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+
+// Kolom Excel (A, B, ..., AA) → indeks berbasis-0.
+const columnRefToIndex = (ref) => {
+  const letters = String(ref).match(/^[A-Z]+/)?.[0] || 'A';
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+};
+
+// Fallback pembaca .xlsx via JSZip: membaca langsung XML di dalam berkas.
+// Dipakai saat ExcelJS gagal (mis. berkas .xlsx buatan ExcelJS-browser yang
+// Content_Types-nya cacat sehingga tidak dapat dibaca kembali oleh ExcelJS).
+const parseXlsxWithJsZip = async (arrayBuffer) => {
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  const sheetName = Object.keys(zip.files)
+    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name))
+    .sort()[0];
+  if (!sheetName) return [];
+
+  const sheetXml = await zip.file(sheetName).async('string');
+  const sharedFile = zip.file('xl/sharedStrings.xml');
+  const sharedXml = sharedFile ? await sharedFile.async('string') : '';
+
+  const shared = [];
+  for (const si of sharedXml.matchAll(/<(?:\w+:)?si>([\s\S]*?)<\/(?:\w+:)?si>/g)) {
+    const texts = [...si[1].matchAll(/<(?:\w+:)?t[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/g)].map((t) =>
+      decodeXmlEntities(t[1]),
+    );
+    shared.push(texts.join(''));
+  }
+
+  const matrix = [];
+  for (const rowMatch of sheetXml.matchAll(/<(?:\w+:)?row[^>]*>([\s\S]*?)<\/(?:\w+:)?row>/g)) {
+    const cells = [];
+    for (const cellMatch of rowMatch[1].matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/g)) {
+      const attrs = cellMatch[1];
+      const inner = cellMatch[2];
+      const ref = attrs.match(/r="([A-Z]+\d+)"/)?.[1] || 'A1';
+      const type = attrs.match(/t="([^"]+)"/)?.[1] || 'n';
+      const valueMatch = inner.match(/<(?:\w+:)?v>([\s\S]*?)<\/(?:\w+:)?v>/);
+
+      let value = '';
+      if (type === 's') {
+        value = shared[Number(valueMatch?.[1] ?? -1)] ?? '';
+      } else if (type === 'inlineStr') {
+        const inlineText = inner.match(/<(?:\w+:)?t[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/);
+        value = decodeXmlEntities(inlineText?.[1] ?? '');
+      } else {
+        value = decodeXmlEntities(valueMatch?.[1] ?? '');
+      }
+      cells[columnRefToIndex(ref)] = value;
+    }
+    for (let i = 0; i < cells.length; i += 1) if (cells[i] === undefined) cells[i] = '';
+    matrix.push(cells);
+  }
+
+  return matrixToRecords(matrix);
+};
+
+// Baca berkas CSV menjadi array objek dengan header ternormalisasi (snake_case),
+// mengikuti bentuk keluaran yang sama dengan pembacaan Excel.
+const readCsvFileToJson = async (file) => {
+  const text = await file.text();
+  const matrix = parseCsvText(text).filter((row) =>
+    row.some((cell) => String(cell ?? '').trim() !== ''),
+  );
+  if (matrix.length === 0) return [];
+
+  const headers = matrix[0].map((h) => normalizeHeaderKey(h));
+  const rows = [];
+  for (let r = 1; r < matrix.length; r += 1) {
+    const record = {};
+    let hasValue = false;
+    matrix[r].forEach((value, index) => {
+      const key = headers[index];
+      if (!key) return;
+      const cleaned = String(value ?? '').trim();
+      if (cleaned !== '') hasValue = true;
+      record[key] = cleaned;
+    });
+    if (hasValue) rows.push(record);
+  }
+  return rows;
+};
 
 const formatHourMinuteWIB = (value) => {
   if (!value) return '-';
@@ -587,9 +758,27 @@ export const exportMapelAuditSessionSummaryToExcel = async ({
 export const readExcelFileToJson = async (file) => {
   if (!file) return [];
 
+  // Berkas CSV diproses sebagai teks (ExcelJS xlsx.load hanya untuk .xlsx).
+  const extension = String(file.name || '').split('.').pop()?.toLowerCase() || '';
+  const isCsv = extension === 'csv' || file.type === 'text/csv';
+  if (isCsv) {
+    return readCsvFileToJson(file);
+  }
+
   const arrayBuffer = await file.arrayBuffer();
+
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(arrayBuffer);
+  try {
+    await workbook.xlsx.load(arrayBuffer);
+  } catch (error) {
+    // Berkas .xlsx yang tidak dapat dibaca ExcelJS (mis. buatan ExcelJS-browser
+    // dengan Content_Types cacat) → coba fallback baca langsung via JSZip.
+    try {
+      return await parseXlsxWithJsZip(arrayBuffer);
+    } catch {
+      throw error;
+    }
+  }
 
   const worksheet = workbook.worksheets[0];
   if (!worksheet) return [];
@@ -618,4 +807,33 @@ export const readExcelFileToJson = async (file) => {
   });
 
   return rows;
+};
+
+// Template diunduh sebagai .xlsx (bisa dibuka native di Excel). Meskipun berkas
+// .xlsx buatan ExcelJS-browser tidak dapat dibaca ulang oleh ExcelJS, pembaca
+// readExcelFileToJson kini memiliki fallback JSZip sehingga berkas ini tetap
+// dapat diunggah ulang dengan aman. Header persis: tanggal_mulai, tanggal_selesai,
+// keterangan (Req 2.4).
+export const downloadKalenderTemplate = async () => {
+  const rows = [
+    {
+      tanggal_mulai: '2025-12-23',
+      tanggal_selesai: '2026-01-04',
+      keterangan: 'Libur Semester Ganjil',
+    },
+    // Contoh tanggal tunggal: tanggal_mulai == tanggal_selesai.
+    {
+      tanggal_mulai: '2026-05-01',
+      tanggal_selesai: '2026-05-01',
+      keterangan: 'Hari Buruh',
+    },
+  ];
+
+  // Bila unduhan gagal, biarkan error terlempar (tidak ditelan) agar UI
+  // menampilkan pesan galat dalam Bahasa Indonesia (Req 2.5).
+  await exportJsonToExcel({
+    rows,
+    sheetName: 'Template Kalender',
+    fileName: 'template-kalender-pendidikan.xlsx',
+  });
 };

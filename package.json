@@ -11,7 +11,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "npm run lint && npm run build",
-    "test:unit": "node --test src/app/utils/workspaceContextRules.test.mjs src/app/hooks/useUserRoleFlags.test.mjs src/shared/utils/compressionPolicy.test.mjs src/shared/utils/attendanceTime.test.mjs src/features/mapel/utils/sessionWorkflowRules.test.mjs src/features/mapel/utils/sessionGeoRules.test.mjs src/features/mapel/utils/attendanceRecapRules.test.mjs src/features/mapel/utils/scoreRecapRules.test.mjs src/features/mapel/utils/sessionHistoryRules.test.mjs src/features/mapel/utils/attendanceIntegrityRules.test.mjs src/features/mapel/utils/schoolDayRules.test.mjs src/features/dashboard/utils/workspacePortalRules.test.mjs src/features/dashboard/utils/executiveKpiRules.test.mjs src/features/pembiasaan/utils/sapaScheduleRules.test.mjs src/features/pembiasaan/utils/attendancePolicyRules.test.mjs src/features/pembiasaan/utils/executivePembiasaanReportRules.test.mjs src/features/pembiasaan/utils/executivePembiasaanScopeRules.test.mjs src/services/shared/attendanceDayService.test.mjs",
+    "test:unit": "node --test src/app/utils/workspaceContextRules.test.mjs src/app/hooks/useUserRoleFlags.test.mjs src/shared/utils/compressionPolicy.test.mjs src/shared/utils/attendanceTime.test.mjs src/features/mapel/utils/sessionWorkflowRules.test.mjs src/features/mapel/utils/sessionGeoRules.test.mjs src/features/mapel/utils/attendanceRecapRules.test.mjs src/features/mapel/utils/scoreRecapRules.test.mjs src/features/mapel/utils/sessionHistoryRules.test.mjs src/features/mapel/utils/attendanceIntegrityRules.test.mjs src/features/mapel/utils/schoolDayRules.test.mjs src/features/dashboard/utils/workspacePortalRules.test.mjs src/features/dashboard/utils/executiveKpiRules.test.mjs src/features/pembiasaan/utils/sapaScheduleRules.test.mjs src/features/pembiasaan/utils/attendancePolicyRules.test.mjs src/features/pembiasaan/utils/executivePembiasaanReportRules.test.mjs src/features/pembiasaan/utils/executivePembiasaanScopeRules.test.mjs src/services/shared/attendanceDayService.test.mjs src/features/admin/utils/calendarUploadRules.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "browser-image-compression": "^2.0.2",
     "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -35,6 +36,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "fast-check": "^4.9.0",
     "globals": "^16.5.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
