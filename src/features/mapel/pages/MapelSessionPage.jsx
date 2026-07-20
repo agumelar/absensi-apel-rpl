@@ -103,6 +103,8 @@ const MapelSessionPage = ({ user }) => {
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [attendanceServerSnapshot, setAttendanceServerSnapshot] = useState({});
   const [savingAttendance, setSavingAttendance] = useState(false);
+  const [attendanceSavedAt, setAttendanceSavedAt] = useState('');
+  const [attendanceQueued, setAttendanceQueued] = useState(false);
   const [syncingQueue, setSyncingQueue] = useState(false);
   const [syncSummary, setSyncSummary] = useState({ total: 0, attendance: 0, score: 0 });
   const [searchTerm, setSearchTerm] = useState('');
@@ -240,6 +242,31 @@ const MapelSessionPage = ({ user }) => {
     });
     return summary;
   }, [students, attendanceDraft]);
+
+  const unsavedCount = useMemo(() => {
+    const ids = new Set([...Object.keys(attendanceDraft), ...Object.keys(attendanceServerSnapshot)]);
+    let count = 0;
+    ids.forEach((id) => {
+      if ((attendanceDraft[id] ?? '') !== (attendanceServerSnapshot[id] ?? '')) count += 1;
+    });
+    return count;
+  }, [attendanceDraft, attendanceServerSnapshot]);
+  const hasUnsavedChanges = unsavedCount > 0;
+
+  const autoSaveLabel = savingAttendance
+    ? 'Menyimpan otomatis…'
+    : attendanceQueued
+      ? `Tersimpan lokal (offline)${attendanceSavedAt ? ` • ${attendanceSavedAt}` : ''}`
+      : hasUnsavedChanges
+        ? `Belum tersimpan • ${unsavedCount} perubahan`
+        : attendanceSavedAt
+          ? `Tersimpan otomatis • ${attendanceSavedAt}`
+          : 'Perubahan tersimpan otomatis';
+  const autoSaveTone = savingAttendance
+    ? 'text-blue-700 bg-blue-50 border-blue-200'
+    : attendanceQueued || hasUnsavedChanges
+      ? 'text-amber-700 bg-amber-50 border-amber-200'
+      : 'text-emerald-700 bg-emerald-50 border-emerald-200';
 
   const attendanceProgress = useMemo(
     () =>
@@ -766,6 +793,67 @@ const MapelSessionPage = ({ user }) => {
     setAttendanceDraft(next);
   };
 
+  // Inti penyimpanan absensi (dipakai auto-save maupun tombol manual).
+  // Optimistik: tandai snapshot = draft saat disimpan tanpa menimpa edit yang sedang berjalan,
+  // sehingga klik yang terjadi selama proses simpan tidak hilang.
+  const persistAttendance = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!agendaSubmitted || !currentSession?.id) return null;
+
+      const draftSnapshot = attendanceDraft;
+      const entries = Object.entries(draftSnapshot).map(([siswaId, status]) => ({
+        sessionId: currentSession.id,
+        siswaId,
+        status,
+      }));
+      if (entries.length === 0) return null;
+
+      try {
+        setSavingAttendance(true);
+        const result = await saveAttendanceWithOfflineFallback({
+          sessionId: currentSession.id,
+          entries,
+          actorName: user?.nama_lengkap,
+          source: 'manual_click',
+          baseMap: attendanceServerSnapshot,
+        });
+        refreshSyncSummary();
+        setAttendanceServerSnapshot(draftSnapshot);
+        setAttendanceQueued(result.mode === 'queued');
+        setAttendanceSavedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+        return result;
+      } catch (error) {
+        if (!silent) Swal.fire('Gagal', error.message, 'error');
+        throw error;
+      } finally {
+        setSavingAttendance(false);
+      }
+    },
+    [agendaSubmitted, currentSession?.id, attendanceDraft, attendanceServerSnapshot, user?.nama_lengkap, refreshSyncSummary],
+  );
+
+  // Auto-save debounce 2 detik setiap ada perubahan absensi.
+  useEffect(() => {
+    if (!agendaSubmitted || !currentSession?.id || !hasUnsavedChanges) return undefined;
+    const timer = setTimeout(() => {
+      persistAttendance({ silent: true }).catch(() => {
+        // Diamkan; status indikator tetap menampilkan "belum tersimpan".
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [persistAttendance, agendaSubmitted, currentSession?.id, hasUnsavedChanges]);
+
+  // Jaring pengaman: peringatkan sebelum menutup/refresh tab bila ada perubahan belum tersimpan.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const handler = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
+
   const handleSaveManualAttendance = async () => {
     if (!agendaSubmitted) {
       Swal.fire('Agenda belum ada', 'Submit agenda dulu sebelum menyimpan absensi.', 'warning');
@@ -777,40 +865,24 @@ const MapelSessionPage = ({ user }) => {
       return;
     }
 
-    const entries = Object.entries(attendanceDraft).map(([siswaId, status]) => ({
-      sessionId: currentSession.id,
-      siswaId,
-      status,
-    }));
-    if (entries.length === 0) {
+    if (Object.keys(attendanceDraft).length === 0) {
       Swal.fire('Belum ada data', 'Silakan klik status manual minimal untuk 1 siswa.', 'info');
       return;
     }
 
     try {
-      setSavingAttendance(true);
-      const result = await saveAttendanceWithOfflineFallback({
-        sessionId: currentSession.id,
-        entries,
-        actorName: user?.nama_lengkap,
-        source: 'manual_click',
-        baseMap: attendanceServerSnapshot,
-      });
-      refreshSyncSummary();
-      if (result.mode === 'queued') {
+      const result = await persistAttendance({ silent: false });
+      if (result?.mode === 'queued') {
         Swal.fire(
           'Tersimpan lokal',
           'Koneksi tidak stabil/offline. Absensi disimpan ke queue lokal dan akan disinkron saat online.',
           'warning',
         );
-      } else {
-        await refreshAttendanceFromServer();
-        Swal.fire('Berhasil', 'Absensi manual berhasil disimpan.', 'success');
+      } else if (result) {
+        Swal.fire({ icon: 'success', title: 'Absensi tersimpan', timer: 1000, showConfirmButton: false });
       }
-    } catch (error) {
-      Swal.fire('Gagal', error.message, 'error');
-    } finally {
-      setSavingAttendance(false);
+    } catch {
+      // Error sudah ditangani di persistAttendance.
     }
   };
 
@@ -1034,14 +1106,9 @@ const MapelSessionPage = ({ user }) => {
         <CardContent className="space-y-4 p-5 md:p-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-lg font-black text-gray-900">Langkah 3 · Absensi Manual (Utama)</h2>
-          <Button
-            onClick={handleSaveManualAttendance}
-            disabled={savingAttendance || !agendaSubmitted || !currentSession}
-            size="sm"
-            className="uppercase tracking-wide"
-          >
-            {savingAttendance ? 'Menyimpan...' : 'Simpan Absensi Manual'}
-          </Button>
+          <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-bold ${autoSaveTone}`}>
+            {autoSaveLabel}
+          </span>
           <Button
             onClick={() => handleFlushSyncQueue({ showSuccessAlert: true })}
             disabled={syncingQueue || syncSummary.total === 0}
@@ -1185,6 +1252,26 @@ const MapelSessionPage = ({ user }) => {
               </div>
             </div>
           </details>
+        </>
+      )}
+
+      {agendaSubmitted && currentSession && !isAttendanceDayOff && students.length > 0 && (
+        <>
+          <div className="h-24" />
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-[290px]">
+            <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3">
+              <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-bold ${autoSaveTone}`}>
+                {autoSaveLabel}
+              </span>
+              <Button
+                onClick={handleSaveManualAttendance}
+                disabled={savingAttendance || !hasUnsavedChanges}
+                className="uppercase tracking-wide"
+              >
+                {savingAttendance ? 'Menyimpan…' : hasUnsavedChanges ? 'Simpan Sekarang' : 'Tersimpan'}
+              </Button>
+            </div>
+          </div>
         </>
       )}
     </PageContainer>
