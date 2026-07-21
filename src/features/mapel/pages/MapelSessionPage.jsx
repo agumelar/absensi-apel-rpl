@@ -377,12 +377,17 @@ const MapelSessionPage = ({ user }) => {
         return;
       }
 
+      // Hanya siswa yang masih anggota roster kelas ini yang boleh masuk draft/snapshot.
+      // Mencegah ID siswa yang sudah pindah kelas / nonaktif tersangkut dan menolak seluruh batch.
+      const rosterIds = new Set((studentRows || []).map((student) => String(student.id)));
+
       const [existing, task] = await Promise.all([
         fetchStudentAttendanceBySession(currentSession.id),
         fetchTeacherAbsenceTaskBySession(currentSession.id),
       ]);
       const map = {};
       existing.forEach((item) => {
+        if (!rosterIds.has(String(item.siswa_id))) return;
         map[item.siswa_id] = normalizeAttendanceCode(item.status);
       });
       setAbsenceTask(task);
@@ -396,7 +401,12 @@ const MapelSessionPage = ({ user }) => {
         localDraft = {};
       }
 
-      setAttendanceDraft({ ...map, ...localDraft });
+      const mergedDraft = { ...map, ...localDraft };
+      const cleanedDraft = {};
+      Object.entries(mergedDraft).forEach(([siswaId, status]) => {
+        if (rosterIds.has(String(siswaId))) cleanedDraft[siswaId] = status;
+      });
+      setAttendanceDraft(cleanedDraft);
     };
 
     loadStudentsAndAttendance().catch((error) => Swal.fire('Gagal', error.message, 'error'));
@@ -800,12 +810,18 @@ const MapelSessionPage = ({ user }) => {
     async ({ silent = false } = {}) => {
       if (!agendaSubmitted || !currentSession?.id) return null;
 
+      // Hanya kirim absensi untuk siswa yang ada di roster kelas sesi ini.
+      // ID asing/basi (siswa pindah kelas / nonaktif) tidak dikirim agar guard
+      // integritas lintas-kelas tidak menolak seluruh batch.
+      const rosterIds = new Set(students.map((student) => String(student.id)));
       const draftSnapshot = attendanceDraft;
-      const entries = Object.entries(draftSnapshot).map(([siswaId, status]) => ({
-        sessionId: currentSession.id,
-        siswaId,
-        status,
-      }));
+      const entries = Object.entries(draftSnapshot)
+        .filter(([siswaId]) => rosterIds.has(String(siswaId)))
+        .map(([siswaId, status]) => ({
+          sessionId: currentSession.id,
+          siswaId,
+          status,
+        }));
       if (entries.length === 0) return null;
 
       try {
@@ -829,7 +845,7 @@ const MapelSessionPage = ({ user }) => {
         setSavingAttendance(false);
       }
     },
-    [agendaSubmitted, currentSession?.id, attendanceDraft, attendanceServerSnapshot, user?.nama_lengkap, refreshSyncSummary],
+    [agendaSubmitted, currentSession?.id, attendanceDraft, attendanceServerSnapshot, students, user?.nama_lengkap, refreshSyncSummary],
   );
 
   // Auto-save debounce 2 detik setiap ada perubahan absensi.
