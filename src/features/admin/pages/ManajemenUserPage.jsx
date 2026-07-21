@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../supabaseClient';
 import { 
-  UserPlus, Trash2, Edit3, User, Loader2, X, Save, Fingerprint, FileUp, Download
+  UserPlus, Trash2, Edit3, User, Loader2, X, Save, Fingerprint, FileUp, Download, Search
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { exportJsonToExcel, readExcelFileToJson } from '../../../services/shared/excelService';
@@ -72,6 +72,7 @@ const ManajemenUser = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [currentId, setCurrentId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
     username: '',
@@ -343,12 +344,33 @@ const ManajemenUser = () => {
     }
   };
 
+  const filteredUsers = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    if (!keyword) return users;
+    return users.filter((u) => {
+      const haystack = [
+        u.nama_lengkap,
+        u.username,
+        u.role,
+        u.master_kelas?.nama_kelas,
+        u.kelas_diampu,
+      ]
+        .map((value) => String(value ?? '').toLowerCase())
+        .join(' ');
+      return haystack.includes(keyword);
+    });
+  }, [users, searchTerm]);
+
   return (
     <PageContainer>
       <PageHeader>
         <div>
           <PageTitle className="text-3xl italic uppercase">Manajemen Akun</PageTitle>
-          <PageSubtitle className="mt-2">Total {users.length} pengguna terdaftar</PageSubtitle>
+          <PageSubtitle className="mt-2">
+            {searchTerm.trim()
+              ? `Menampilkan ${filteredUsers.length} dari ${users.length} pengguna`
+              : `Total ${users.length} pengguna terdaftar`}
+          </PageSubtitle>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={handleDownloadTemplate} className="border border-slate-200 text-xs uppercase">
@@ -443,6 +465,30 @@ const ManajemenUser = () => {
         </Card>
       )}
 
+      <div className="mb-4">
+        <div className="relative">
+          <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Cari nama, username, role, atau kelas..."
+            className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-10 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
+            aria-label="Cari pengguna"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Bersihkan pencarian"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
       <Card className="rounded-3xl overflow-hidden">
         <table className="premium-table text-left">
           <thead>
@@ -461,7 +507,13 @@ const ManajemenUser = () => {
                   <span className="micro-loading">Memuat data pengguna...</span>
                 </td>
               </tr>
-            ) : users.map((u) => (
+            ) : filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="p-16 text-center text-xs font-bold uppercase tracking-widest text-gray-400">
+                  {searchTerm.trim() ? `Tidak ada pengguna cocok dengan "${searchTerm.trim()}"` : 'Belum ada pengguna terdaftar.'}
+                </td>
+              </tr>
+            ) : filteredUsers.map((u) => (
               <tr key={u.id} className="hover:bg-blue-50/20 transition-all group">
                 <td className="p-6">
                   <p className="font-black text-gray-800 text-xs uppercase">{u.nama_lengkap}</p>
