@@ -362,7 +362,7 @@ const AppShell = ({
         </div>
       </aside>
 
-      <main className="flex min-h-screen w-full flex-1 flex-col md:ml-[290px]">
+      <main className="flex min-h-screen min-w-0 w-full flex-1 flex-col md:ml-[290px] md:w-[calc(100%-290px)] md:flex-none">
         <header
           className={cn(
             'sticky top-0 z-30 border-b px-4 py-3 backdrop-blur-xl md:px-8',

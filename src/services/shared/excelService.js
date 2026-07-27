@@ -554,14 +554,16 @@ export const exportTeacherPerformanceToExcel = async ({
   worksheet.addRow([]);
 
   const headerRow = worksheet.addRow([
-    'No',
+    'Peringkat Perhatian',
     'Guru',
     'Bulan',
     'Total Sesi Terjadwal',
     'Total Hadir',
     'Total Terlambat',
-    'Tidak Masuk',
+    'Lupa Absen',
+    'Tidak Masuk Dilaporkan',
     'Total Tidak Check-Out',
+    'Skor Perhatian',
     'Presence %',
     'Late %',
     'Tidak Masuk %',
@@ -574,9 +576,6 @@ export const exportTeacherPerformanceToExcel = async ({
   const safeRows = Array.isArray(rows) ? rows : [];
   const bulanLabel = String(meta.bulanLabel || meta.periodeLabel || '-');
   safeRows.forEach((row, index) => {
-    const checkInCount = Number(row.check_in_sessions || 0);
-    const checkOutCount = Number(row.check_out_sessions || 0);
-    const tidakCheckOut = Math.max(0, checkInCount - checkOutCount);
     worksheet.addRow([
       index + 1,
       row.guru_nama || '-',
@@ -584,8 +583,10 @@ export const exportTeacherPerformanceToExcel = async ({
       Number(row.total_sessions || 0),
       Number(row.hadir_sessions || 0),
       Number(row.telat_sessions || 0),
-      Number(row.tidak_masuk_sessions || 0),
-      tidakCheckOut,
+      Number(row.lupa_absen_sessions || 0),
+      Number(row.confirmed_absence_sessions || 0),
+      Number(row.missing_check_out_sessions || 0),
+      Number(row.attention_score || 0),
       Number(row.presence_rate || 0),
       Number(row.late_rate || 0),
       Number(row.tidak_masuk_rate || 0),

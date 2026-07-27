@@ -161,7 +161,11 @@ export const masterMapel = [
 export const schedule = [
   { id: 'sch1', guru_id: 'u9', kelas_id: 'k3', mapel_id: 'm1', hari: 'Senin',   jam_mulai: '07:00', jam_selesai: '08:30', walikelas: walikelas.find(u => u.id === 'u9'), master_kelas: masterKelas.find(k => k.id === 'k3'), master_mapel: masterMapel[0] },
   { id: 'sch2', guru_id: 'u9', kelas_id: 'k4', mapel_id: 'm2', hari: 'Selasa',  jam_mulai: '07:00', jam_selesai: '08:30', walikelas: walikelas.find(u => u.id === 'u9'), master_kelas: masterKelas.find(k => k.id === 'k4'), master_mapel: masterMapel[1] },
-  { id: 'sch3', guru_id: 'u9', kelas_id: 'k5', mapel_id: 'm1', hari: 'Rabu',    jam_mulai: '09:00', jam_selesai: '10:30', walikelas: walikelas.find(u => u.id === 'u9'), master_kelas: masterKelas.find(k => k.id === 'k5'), master_mapel: masterMapel[0] },
+  { id: 'sch3', guru_id: 'u11', kelas_id: 'k1', mapel_id: 'm1', hari: 'Rabu',   jam_mulai: '09:00', jam_selesai: '10:30', walikelas: walikelas.find(u => u.id === 'u11'), master_kelas: masterKelas.find(k => k.id === 'k1'), master_mapel: masterMapel[0] },
+  { id: 'sch4', guru_id: 'u11', kelas_id: 'k2', mapel_id: 'm2', hari: 'Kamis',  jam_mulai: '07:00', jam_selesai: '08:30', walikelas: walikelas.find(u => u.id === 'u11'), master_kelas: masterKelas.find(k => k.id === 'k2'), master_mapel: masterMapel[1] },
+  { id: 'sch5', guru_id: 'u12', kelas_id: 'k3', mapel_id: 'm5', hari: 'Jumat',  jam_mulai: '08:00', jam_selesai: '09:30', walikelas: walikelas.find(u => u.id === 'u12'), master_kelas: masterKelas.find(k => k.id === 'k3'), master_mapel: masterMapel[4] },
+  { id: 'sch6', guru_id: 'u2', kelas_id: 'k4', mapel_id: 'm6', hari: 'Senin',   jam_mulai: '10:00', jam_selesai: '11:30', walikelas: walikelas.find(u => u.id === 'u2'), master_kelas: masterKelas.find(k => k.id === 'k4'), master_mapel: masterMapel[5] },
+  { id: 'sch7', guru_id: 'u3', kelas_id: 'k5', mapel_id: 'm5', hari: 'Selasa',  jam_mulai: '09:00', jam_selesai: '10:30', walikelas: walikelas.find(u => u.id === 'u3'), master_kelas: masterKelas.find(k => k.id === 'k5'), master_mapel: masterMapel[4] },
 ];
 
 // ---------- session (mapel sesi) ----------
@@ -169,22 +173,38 @@ export const session = (() => {
   _seed = 123;
   const sessions = [];
   let ctr = 1;
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const addMinutes = (time, minutes) => {
+    const [hours, mins] = time.split(':').map(Number);
+    const total = hours * 60 + mins + minutes;
+    return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`;
+  };
   schedule.forEach((sch) => {
-    DATES.slice(0, 30).forEach((tgl) => {
-      if (seededRandom() > 0.1) {
-        sessions.push({
-          id: `ses_${ctr++}`,
-          schedule_id: sch.id,
-          guru_id: sch.guru_id,
-          tanggal: tgl,
-          waktu_check_in: `${tgl}T07:${pad(Math.floor(seededRandom() * 15))}:00+07:00`,
-          waktu_check_out: seededRandom() > 0.1 ? `${tgl}T08:${pad(Math.floor(seededRandom() * 30) + 30)}:00+07:00` : null,
-          status: 'Hadir',
-          agenda: 'Belajar materi bab ' + ctr,
-          schedule: sch,
-          walikelas: sch.walikelas,
-        });
-      }
+    DATES.slice(0, 45).forEach((tgl) => {
+      const date = new Date(`${tgl}T12:00:00`);
+      if (dayNames[date.getDay()] !== sch.hari) return;
+
+      // Sebagian slot sengaja tanpa sesi untuk memperagakan deteksi "lupa absen".
+      if (seededRandom() <= 0.16) return;
+
+      const explicitAbsent = seededRandom() <= 0.08;
+      const lateMinutes = seededRandom() <= 0.28 ? 16 + Math.floor(seededRandom() * 20) : Math.floor(seededRandom() * 10);
+      const checkInTime = addMinutes(sch.jam_mulai, lateMinutes);
+      const checkOutTime = addMinutes(sch.jam_selesai, 5 + Math.floor(seededRandom() * 15));
+      sessions.push({
+        id: `ses_${ctr++}`,
+        schedule_id: sch.id,
+        guru_id: sch.guru_id,
+        tanggal: tgl,
+        waktu_check_in: explicitAbsent ? null : `${tgl}T${checkInTime}:00+07:00`,
+        waktu_check_out: explicitAbsent || seededRandom() <= 0.14 ? null : `${tgl}T${checkOutTime}:00+07:00`,
+        foto_check_in: null,
+        foto_check_out: null,
+        status: explicitAbsent ? 'Tidak Masuk' : 'Hadir',
+        agenda: explicitAbsent ? null : `Materi pembelajaran pertemuan ${ctr}`,
+        schedule: sch,
+        walikelas: sch.walikelas,
+      });
     });
   });
   return sessions;
@@ -220,6 +240,8 @@ export const classAgenda = session.map((ses, i) => ({
   guru_id: ses.guru_id,
   tanggal: ses.tanggal,
   materi: 'Materi Pertemuan ke-' + (i + 1),
+  topik: ses.status === 'Tidak Masuk' ? null : 'Materi Pertemuan ke-' + (i + 1),
+  metode: ses.status === 'Tidak Masuk' ? null : seededChoice(['Diskusi', 'Praktik', 'Demonstrasi']),
   keterangan: '',
 }));
 

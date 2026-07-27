@@ -21,10 +21,13 @@ import {
   findFirstAttendanceClassMismatch,
 } from '../features/mapel/utils/attendanceIntegrityRules';
 import {
+  MAPEL_PERFORMANCE_START_DATE,
+  buildExpectedScheduleOccurrences,
   buildImpactedClassBuckets,
   buildTrendBuckets,
-  computeSlaBreach,
+  computeTeacherAttentionScore,
   computeTeacherRates,
+  resolvePerformancePeriodStart,
 } from '../features/dashboard/utils/executiveKpiRules';
 import {
   buildSchoolHolidaySet,
@@ -173,6 +176,12 @@ const getDayNameWIB = (dateValue) => {
 };
 
 const normalizeSessionStatus = (status) => String(status || '').trim().toLowerCase();
+
+const normalizeComparableId = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : String(value);
+};
 
 const fetchSchoolHolidaySetInRange = async ({ fromDate, toDate } = {}) => {
   if (!fromDate || !toDate) return new Set();
@@ -1286,6 +1295,7 @@ const buildDailySlaMonitoringRows = async ({ schedules, targetDate, nowMinutes }
   const rows = schedules
     .map((schedule) => {
       const startMinutes = normalizeTimeToMinutes(schedule.jam_mulai, 'jam_mulai');
+      const endMinutes = normalizeTimeToMinutes(schedule.jam_selesai, 'jam_selesai');
       const graceDeadline = startMinutes + SLA_GURU_KOSONG_MINUTES;
       const session = sessionMap.get(String(schedule.id)) || null;
       const task = session ? taskMap.get(String(session.id)) ?? null : null;
@@ -1337,7 +1347,10 @@ const buildDailySlaMonitoringRows = async ({ schedules, targetDate, nowMinutes }
           schedule,
           session,
           task,
-          warningLabel: `Lewat SLA ${nowMinutes - graceDeadline} menit`,
+          warningLabel:
+            nowMinutes > endMinutes
+              ? 'Lupa Absen / Tidak Absen setelah jadwal selesai'
+              : `Lewat SLA ${nowMinutes - graceDeadline} menit`,
         };
       }
 
@@ -1443,7 +1456,7 @@ export const fetchExecutiveDailyMonitoring = async ({ tanggal, kelasId } = {}) =
       .select('id')
       .eq('jurusan_id', scope.jurusanId);
     if (kelasError) throw kelasError;
-    allowedKelasIds = (kelasRows || []).map((item) => Number(item.id)).filter((id) => Number.isInteger(id));
+    allowedKelasIds = (kelasRows || []).map((item) => normalizeComparableId(item.id)).filter((id) => id !== null);
     if (allowedKelasIds.length === 0) {
       return {
         summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
@@ -1452,7 +1465,7 @@ export const fetchExecutiveDailyMonitoring = async ({ tanggal, kelasId } = {}) =
     }
   }
 
-  const requestedKelasId = kelasId ? Number(kelasId) : null;
+  const requestedKelasId = normalizeComparableId(kelasId);
   if (requestedKelasId && allowedKelasIds && !allowedKelasIds.includes(requestedKelasId)) {
     return {
       summary: { total: 0, warning: 0, checkedIn: 0, absent: 0, onWindow: 0 },
@@ -1489,7 +1502,7 @@ export const fetchExecutiveMapelKpiDataset = async ({
 } = {}) => {
   const scope = await resolveExecutiveScopeOrThrow();
   const endDate = toDate || getTodayDateWIB();
-  const startDate = fromDate || (() => {
+  const requestedStartDate = fromDate || (() => {
     const d = toWibDateTime(endDate);
     d.setDate(d.getDate() - 6);
     return new Intl.DateTimeFormat('en-CA', {
@@ -1499,6 +1512,39 @@ export const fetchExecutiveMapelKpiDataset = async ({
       day: '2-digit',
     }).format(d);
   })();
+  const startDate = resolvePerformancePeriodStart(requestedStartDate);
+
+  if (endDate < startDate) {
+    return {
+      summary: {
+        fromDate: startDate,
+        toDate: endDate,
+        monitoringStartDate: MAPEL_PERFORMANCE_START_DATE,
+        totalSessions: 0,
+        totalScheduled: 0,
+        totalTeachers: 0,
+        totalHadir: 0,
+        totalTidakMasuk: 0,
+        totalLupaAbsen: 0,
+        totalConfirmedAbsence: 0,
+        totalLate: 0,
+        totalCheckIns: 0,
+        totalCheckOuts: 0,
+        totalMissingCheckOut: 0,
+        presenceRate: 0,
+        lateRate: 0,
+        tidakMasukRate: 0,
+        slaBreachRate: 0,
+        impactedClasses: 0,
+        roleScope: scope.isJurusanScoped ? 'jurusan' : 'global',
+        jurusanId: scope.jurusanId,
+      },
+      teacherRows: [],
+      trendRows: [],
+      impactedRows: [],
+      alertRows: [],
+    };
+  }
 
   let kelasScopeQuery = supabase.from('master_kelas').select('id, jurusan_id');
   if (scope.isJurusanScoped) {
@@ -1508,7 +1554,9 @@ export const fetchExecutiveMapelKpiDataset = async ({
   const { data: kelasScopeRows, error: kelasScopeError } = await kelasScopeQuery;
   if (kelasScopeError) throw kelasScopeError;
 
-  const allowedKelasIds = new Set((kelasScopeRows || []).map((row) => Number(row.id)).filter((id) => Number.isInteger(id)));
+  const allowedKelasIds = new Set(
+    (kelasScopeRows || []).map((row) => normalizeComparableId(row.id)).filter((id) => id !== null),
+  );
   if (allowedKelasIds.size === 0) {
     return {
       summary: {
@@ -1533,7 +1581,7 @@ export const fetchExecutiveMapelKpiDataset = async ({
     };
   }
 
-  const requestedKelasId = kelasId ? Number(kelasId) : null;
+  const requestedKelasId = normalizeComparableId(kelasId);
   if (requestedKelasId && !allowedKelasIds.has(requestedKelasId)) {
     return {
       summary: {
@@ -1560,7 +1608,7 @@ export const fetchExecutiveMapelKpiDataset = async ({
 
   let scheduleQuery = supabase
     .from('schedule')
-    .select('id, guru_id, kelas_id, mapel_id, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel)');
+    .select('id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel)');
 
   if (requestedKelasId) {
     scheduleQuery = scheduleQuery.eq('kelas_id', requestedKelasId);
@@ -1569,7 +1617,7 @@ export const fetchExecutiveMapelKpiDataset = async ({
   }
 
   if (mapelId) {
-    scheduleQuery = scheduleQuery.eq('mapel_id', Number(mapelId));
+    scheduleQuery = scheduleQuery.eq('mapel_id', normalizeComparableId(mapelId));
   }
   if (guruId) {
     scheduleQuery = scheduleQuery.eq('guru_id', String(guruId));
@@ -1622,49 +1670,45 @@ export const fetchExecutiveMapelKpiDataset = async ({
   if (guruError) throw guruError;
 
   const holidaySet = await fetchSchoolHolidaySetInRange({ fromDate: startDate, toDate: endDate });
-  const activeSessionRows = filterActiveSchoolSessionRows(sessionRows || [], holidaySet);
-
   const guruMap = new Map((guruRows || []).map((row) => [String(row.id), row.nama_lengkap]));
-  const scheduleMap = new Map(schedules.map((row) => [String(row.id), row]));
+  const resolvedNowMinutes = Number.isFinite(nowMinutes) ? Number(nowMinutes) : getWibMinutesNow();
+  const todayWib = getTodayDateWIB();
+  const occurrences = buildExpectedScheduleOccurrences({
+    schedules,
+    sessions: sessionRows || [],
+    fromDate: startDate,
+    toDate: endDate,
+    holidaySet,
+    todayDate: todayWib,
+    nowMinutes: resolvedNowMinutes,
+  });
 
-  const rows = activeSessionRows.map((row) => {
-    const schedule = scheduleMap.get(String(row.schedule_id)) || null;
-    const statusNorm = normalizeSessionStatus(row.status);
-    const isTidakMasuk = statusNorm === 'tidak masuk' || statusNorm === 'absent';
-    const hasCheckIn = Boolean(row.waktu_check_in);
-
-    let isLate = false;
-    if (hasCheckIn && schedule?.jam_mulai) {
-      const checkInParts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Jakarta',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).formatToParts(new Date(row.waktu_check_in));
-      const map = {};
-      checkInParts.forEach((part) => {
-        map[part.type] = part.value;
-      });
-      const checkInMinutes = Number.parseInt(map.hour || '0', 10) * 60 + Number.parseInt(map.minute || '0', 10);
-      const startMinutes = normalizeTimeToMinutes(schedule.jam_mulai, 'jam_mulai');
-      isLate = checkInMinutes > startMinutes + LATE_CHECKIN_TOLERANCE_MINUTES;
-    }
-
+  const rows = occurrences.map((occurrence) => {
+    const schedule = occurrence.schedule || null;
+    const sessionRow = occurrence.session || null;
     return {
-      session_id: row.id,
-      schedule_id: row.schedule_id,
-      tanggal: row.tanggal,
-      statusNorm: isTidakMasuk ? 'tidak masuk' : hasCheckIn ? 'hadir' : 'pending',
-      isLate,
+      occurrence_id: occurrence.occurrence_id,
+      session_id: sessionRow?.id || null,
+      schedule_id: schedule?.id || sessionRow?.schedule_id || null,
+      tanggal: occurrence.tanggal,
+      statusNorm: occurrence.statusNorm,
+      status_label: occurrence.statusLabel,
+      attention_type: occurrence.attentionType,
+      is_virtual: occurrence.is_virtual,
+      is_expected_schedule: occurrence.is_expected_schedule,
+      isLate: occurrence.isLate,
+      breached: occurrence.breached,
       guru_id: schedule?.guru_id ?? null,
       guru_nama: guruMap.get(String(schedule?.guru_id || '')) || 'Guru',
       kelas_id: schedule?.kelas_id ?? null,
       kelas_nama: schedule?.master_kelas?.nama_kelas || '-',
       mapel_id: schedule?.mapel_id ?? null,
       mapel_nama: schedule?.master_mapel?.nama_mapel || '-',
+      hari: schedule?.hari || '-',
       jam_mulai: schedule?.jam_mulai || null,
-      waktu_check_in: row.waktu_check_in || null,
-      waktu_check_out: row.waktu_check_out || null,
+      jam_selesai: schedule?.jam_selesai || null,
+      waktu_check_in: sessionRow?.waktu_check_in || null,
+      waktu_check_out: sessionRow?.waktu_check_out || null,
     };
   });
 
@@ -1678,10 +1722,14 @@ export const fetchExecutiveMapelKpiDataset = async ({
       total_sessions: 0,
       hadir_sessions: 0,
       tidak_masuk_sessions: 0,
+      lupa_absen_sessions: 0,
+      confirmed_absence_sessions: 0,
       telat_sessions: 0,
       pending_sessions: 0,
+      sla_breach_sessions: 0,
       check_in_sessions: 0,
       check_out_sessions: 0,
+      missing_check_out_sessions: 0,
       kelas_terakhir: row.kelas_nama,
       mapel_terakhir: row.mapel_nama,
     };
@@ -1690,9 +1738,13 @@ export const fetchExecutiveMapelKpiDataset = async ({
     if (row.statusNorm === 'hadir') current.hadir_sessions += 1;
     else if (row.statusNorm === 'tidak masuk') current.tidak_masuk_sessions += 1;
     else current.pending_sessions += 1;
+    if (row.attention_type === 'lupa_absen') current.lupa_absen_sessions += 1;
+    if (row.attention_type === 'confirmed_absence') current.confirmed_absence_sessions += 1;
+    if (row.breached) current.sla_breach_sessions += 1;
     if (row.isLate) current.telat_sessions += 1;
     if (row.waktu_check_in) current.check_in_sessions += 1;
     if (row.waktu_check_out) current.check_out_sessions += 1;
+    if (row.attention_type === 'missing_checkout') current.missing_check_out_sessions += 1;
 
     teacherMap.set(guruIdKey, current);
   });
@@ -1709,6 +1761,13 @@ export const fetchExecutiveMapelKpiDataset = async ({
       presence_rate: rates.presenceRate,
       late_rate: rates.lateRate,
       tidak_masuk_rate: rates.tidakMasukRate,
+      attention_score: computeTeacherAttentionScore({
+        lupaAbsen: row.lupa_absen_sessions,
+        confirmedAbsence: row.confirmed_absence_sessions,
+        late: row.telat_sessions,
+        missingCheckOut: row.missing_check_out_sessions,
+        slaBreach: row.pending_sessions > 0 ? row.sla_breach_sessions : 0,
+      }),
       check_out_rate:
         row.check_in_sessions > 0
           ? Math.round((row.check_out_sessions / row.check_in_sessions) * 1000) / 10
@@ -1716,35 +1775,17 @@ export const fetchExecutiveMapelKpiDataset = async ({
     };
   });
 
-  const totalSessions = rows.length;
+  const totalSessions = rows.filter((row) => Boolean(row.session_id)).length;
   const totalScheduled = rows.length;
   const totalHadir = rows.filter((row) => row.statusNorm === 'hadir').length;
   const totalTidakMasuk = rows.filter((row) => row.statusNorm === 'tidak masuk').length;
+  const totalLupaAbsen = rows.filter((row) => row.attention_type === 'lupa_absen').length;
+  const totalConfirmedAbsence = rows.filter((row) => row.attention_type === 'confirmed_absence').length;
   const totalLate = rows.filter((row) => row.isLate).length;
   const totalCheckIns = rows.filter((row) => Boolean(row.waktu_check_in)).length;
   const totalCheckOuts = rows.filter((row) => Boolean(row.waktu_check_out)).length;
-
-  const resolvedNowMinutes = Number.isFinite(nowMinutes) ? Number(nowMinutes) : getWibMinutesNow();
-  const todayWib = getTodayDateWIB();
-  const impactedSource = rows.map((row) => {
-    const startMinutes = row.jam_mulai ? normalizeTimeToMinutes(row.jam_mulai, 'jam_mulai') : 0;
-    let breach = false;
-    if (row.tanggal < todayWib) {
-      breach = !row.waktu_check_in;
-    } else if (row.tanggal === todayWib) {
-      breach = computeSlaBreach({
-        startMinutes,
-        nowMinutes: resolvedNowMinutes,
-        hasCheckIn: Boolean(row.waktu_check_in),
-      }).isBreach;
-    }
-    return {
-      tanggal: row.tanggal,
-      kelas_id: row.kelas_id,
-      breached: breach,
-      ...row,
-    };
-  });
+  const totalMissingCheckOut = rows.filter((row) => row.attention_type === 'missing_checkout').length;
+  const impactedSource = rows;
 
   const impactedRows = buildImpactedClassBuckets(impactedSource);
   const breachedRows = impactedSource.filter((row) => row.breached);
@@ -1766,14 +1807,18 @@ export const fetchExecutiveMapelKpiDataset = async ({
     summary: {
       fromDate: startDate,
       toDate: endDate,
+      monitoringStartDate: MAPEL_PERFORMANCE_START_DATE,
       totalSessions,
       totalScheduled,
       totalTeachers: teacherRows.length,
       totalHadir,
       totalTidakMasuk,
+      totalLupaAbsen,
+      totalConfirmedAbsence,
       totalLate,
       totalCheckIns,
       totalCheckOuts,
+      totalMissingCheckOut,
       presenceRate: summaryRates.presenceRate,
       lateRate: summaryRates.lateRate,
       tidakMasukRate: summaryRates.tidakMasukRate,
@@ -1783,8 +1828,10 @@ export const fetchExecutiveMapelKpiDataset = async ({
       jurusanId: scope.jurusanId,
     },
     teacherRows: teacherRows.sort((a, b) => {
-      if (b.late_rate !== a.late_rate) return b.late_rate - a.late_rate;
-      return b.total_sessions - a.total_sessions;
+      if (b.attention_score !== a.attention_score) return b.attention_score - a.attention_score;
+      if (b.lupa_absen_sessions !== a.lupa_absen_sessions) return b.lupa_absen_sessions - a.lupa_absen_sessions;
+      if (b.telat_sessions !== a.telat_sessions) return b.telat_sessions - a.telat_sessions;
+      return a.guru_nama.localeCompare(b.guru_nama, 'id-ID');
     }),
     trendRows: buildTrendBuckets(rows, trendDimension),
     impactedRows,
@@ -1797,7 +1844,7 @@ export const fetchExecutiveMapelKpiDataset = async ({
         kelas_nama: row.kelas_nama,
         mapel_nama: row.mapel_nama,
         guru_nama: row.guru_nama,
-        warning_label: 'Melewati SLA 15 menit tanpa check-in',
+        warning_label: row.status_label || 'Melewati SLA 15 menit tanpa check-in',
       })),
   };
 };
@@ -1882,13 +1929,21 @@ export const fetchMapelTeacherPerformance = async ({ fromDate, toDate, kelasId, 
   return {
     summary: {
       totalSessions: dataset.summary?.totalSessions || 0,
+      totalScheduled: dataset.summary?.totalScheduled || 0,
       totalTeachers: dataset.summary?.totalTeachers || 0,
+      totalHadir: dataset.summary?.totalHadir || 0,
+      totalTidakMasuk: dataset.summary?.totalTidakMasuk || 0,
+      totalLupaAbsen: dataset.summary?.totalLupaAbsen || 0,
+      totalConfirmedAbsence: dataset.summary?.totalConfirmedAbsence || 0,
+      totalLate: dataset.summary?.totalLate || 0,
       totalCheckIns: dataset.summary?.totalCheckIns || 0,
       totalCheckOuts: dataset.summary?.totalCheckOuts || 0,
+      totalMissingCheckOut: dataset.summary?.totalMissingCheckOut || 0,
       averagePresenceRate: dataset.summary?.presenceRate || 0,
       averageLateRate: dataset.summary?.lateRate || 0,
       fromDate: dataset.summary?.fromDate || fromDate || getTodayDateWIB(),
       toDate: dataset.summary?.toDate || toDate || getTodayDateWIB(),
+      monitoringStartDate: dataset.summary?.monitoringStartDate || MAPEL_PERFORMANCE_START_DATE,
       tidakMasukRate: dataset.summary?.tidakMasukRate || 0,
       slaBreachRate: dataset.summary?.slaBreachRate || 0,
       impactedClasses: dataset.summary?.impactedClasses || 0,
@@ -2027,6 +2082,7 @@ export const fetchMapelAuditSessionSummary = async ({
   toDate,
   kelasId,
   mapelId,
+  attentionType = 'all',
   page = 1,
   pageSize = 20,
 } = {}) => {
@@ -2041,7 +2097,9 @@ export const fetchMapelAuditSessionSummary = async ({
   }
   const { data: kelasScopeRows, error: kelasScopeError } = await kelasScopeQuery;
   if (kelasScopeError) throw kelasScopeError;
-  const allowedKelasIds = new Set((kelasScopeRows || []).map((row) => Number(row.id)).filter((id) => Number.isInteger(id)));
+  const allowedKelasIds = new Set(
+    (kelasScopeRows || []).map((row) => normalizeComparableId(row.id)).filter((id) => id !== null),
+  );
   if (allowedKelasIds.size === 0) {
     return {
       rows: [],
@@ -2052,7 +2110,7 @@ export const fetchMapelAuditSessionSummary = async ({
     };
   }
 
-  const requestedKelasId = kelasId ? Number(kelasId) : null;
+  const requestedKelasId = normalizeComparableId(kelasId);
   if (requestedKelasId && !allowedKelasIds.has(requestedKelasId)) {
     return {
       rows: [],
@@ -2067,53 +2125,107 @@ export const fetchMapelAuditSessionSummary = async ({
   const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(Math.floor(pageSize), 200) : 20;
   const from = (safePage - 1) * safePageSize;
   const to = from + safePageSize - 1;
+  const requestedStartDate = fromDate || getTodayDateWIB();
+  const startDate = resolvePerformancePeriodStart(requestedStartDate);
+  const endDate = toDate || getTodayDateWIB();
 
-  let query = supabase
-    .from('session')
-    .select(
-      'id, tanggal, status, waktu_check_in, foto_check_in, waktu_check_out, foto_check_out, schedule:schedule_id!inner(id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel, kode_mapel))',
-    )
-    .order('tanggal', { ascending: false })
-    .order('created_at', { ascending: false });
-
-  if (fromDate) {
-    query = query.gte('tanggal', fromDate);
-  }
-  if (toDate) {
-    query = query.lte('tanggal', toDate);
-  }
-  if (requestedKelasId) {
-    query = query.eq('schedule.kelas_id', requestedKelasId);
-  } else {
-    query = query.in('schedule.kelas_id', [...allowedKelasIds]);
-  }
-  if (mapelId) {
-    query = query.eq('schedule.mapel_id', Number(mapelId));
-  }
-
-  const { data: sessionRows, error: sessionError } = await query;
-  if (sessionError) throw sessionError;
-
-  const holidaySet = await fetchSchoolHolidaySetInRange({
-    fromDate: fromDate || getTodayDateWIB(),
-    toDate: toDate || getTodayDateWIB(),
-  });
-  const activeRows = filterActiveSchoolSessionRows(sessionRows || [], holidaySet);
-  const totalFiltered = activeRows.length;
-  const rows = activeRows.slice(from, to + 1);
-
-  if (rows.length === 0) {
+  if (endDate < startDate) {
     return {
       rows: [],
-      total: totalFiltered,
+      total: 0,
       page: safePage,
       pageSize: safePageSize,
-      totalPages: Math.max(1, Math.ceil(totalFiltered / safePageSize)),
+      totalPages: 1,
+      summary: {
+        fromDate: startDate,
+        toDate: endDate,
+        monitoringStartDate: MAPEL_PERFORMANCE_START_DATE,
+        totalScheduled: 0,
+        totalSessions: 0,
+        totalHadir: 0,
+        totalLupaAbsen: 0,
+        totalConfirmedAbsence: 0,
+        totalTidakMasuk: 0,
+        totalPending: 0,
+        totalLate: 0,
+        totalMissingCheckOut: 0,
+        presenceRate: 0,
+        lateRate: 0,
+        tidakMasukRate: 0,
+        slaBreachRate: 0,
+        roleScope: scope.isJurusanScoped ? 'jurusan' : 'global',
+      },
     };
   }
 
-  const sessionIds = rows.map((row) => row.id);
-  const guruIds = [...new Set(rows.map((row) => row.schedule?.guru_id).filter(Boolean))];
+  let scheduleQuery = supabase
+    .from('schedule')
+    .select(
+      'id, guru_id, kelas_id, mapel_id, hari, jam_mulai, jam_selesai, master_kelas(nama_kelas), master_mapel(nama_mapel, kode_mapel)',
+    );
+  if (requestedKelasId) {
+    scheduleQuery = scheduleQuery.eq('kelas_id', requestedKelasId);
+  } else {
+    scheduleQuery = scheduleQuery.in('kelas_id', [...allowedKelasIds]);
+  }
+  if (mapelId) {
+    scheduleQuery = scheduleQuery.eq('mapel_id', normalizeComparableId(mapelId));
+  }
+
+  const { data: scheduleRows, error: scheduleError } = await scheduleQuery;
+  if (scheduleError) throw scheduleError;
+  const schedules = scheduleRows || [];
+  if (schedules.length === 0) {
+    return {
+      rows: [],
+      total: 0,
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages: 1,
+      summary: {
+        totalScheduled: 0,
+        totalSessions: 0,
+        totalHadir: 0,
+        totalLupaAbsen: 0,
+        totalConfirmedAbsence: 0,
+        totalPending: 0,
+        totalLate: 0,
+        totalMissingCheckOut: 0,
+        presenceRate: 0,
+        lateRate: 0,
+        tidakMasukRate: 0,
+        slaBreachRate: 0,
+      },
+    };
+  }
+
+  const scheduleIds = schedules.map((row) => row.id);
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from('session')
+    .select('id, schedule_id, tanggal, status, waktu_check_in, foto_check_in, waktu_check_out, foto_check_out')
+    .in('schedule_id', scheduleIds)
+    .gte('tanggal', startDate)
+    .lte('tanggal', endDate);
+  if (sessionError) throw sessionError;
+
+  const holidaySet = await fetchSchoolHolidaySetInRange({ fromDate: startDate, toDate: endDate });
+  const allOccurrences = buildExpectedScheduleOccurrences({
+    schedules,
+    sessions: sessionRows || [],
+    fromDate: startDate,
+    toDate: endDate,
+    holidaySet,
+    todayDate: getTodayDateWIB(),
+    nowMinutes: getWibMinutesNow(),
+  });
+  const occurrences =
+    attentionType && attentionType !== 'all'
+      ? allOccurrences.filter((row) => String(row.attentionType) === String(attentionType))
+      : allOccurrences;
+  const totalFiltered = occurrences.length;
+  const pagedOccurrences = occurrences.slice(from, to + 1);
+  const sessionIds = pagedOccurrences.map((row) => row.session?.id).filter(Boolean);
+  const guruIds = [...new Set(pagedOccurrences.map((row) => row.schedule?.guru_id).filter(Boolean))];
 
   const [
     { data: agendaRows, error: agendaError },
@@ -2121,12 +2233,18 @@ export const fetchMapelAuditSessionSummary = async ({
     { data: absenceTaskRows, error: taskError },
     { data: guruRows, error: guruError },
   ] = await Promise.all([
-    supabase.from('class_agenda').select('session_id, topik, metode').in('session_id', sessionIds),
-    supabase.from('student_attendance_mapel').select('session_id, status').in('session_id', sessionIds),
-    supabase
-      .from('teacher_absence_task')
-      .select('session_id, instruksi, file_path, delivered_by_picket, delivered_at')
-      .in('session_id', sessionIds),
+    sessionIds.length
+      ? supabase.from('class_agenda').select('session_id, topik, metode').in('session_id', sessionIds)
+      : Promise.resolve({ data: [], error: null }),
+    sessionIds.length
+      ? supabase.from('student_attendance_mapel').select('session_id, status').in('session_id', sessionIds)
+      : Promise.resolve({ data: [], error: null }),
+    sessionIds.length
+      ? supabase
+        .from('teacher_absence_task')
+        .select('session_id, instruksi, file_path, delivered_by_picket, delivered_at')
+        .in('session_id', sessionIds)
+      : Promise.resolve({ data: [], error: null }),
     guruIds.length
       ? supabase.from('walikelas').select('id, nama_lengkap').in('id', guruIds)
       : Promise.resolve({ data: [], error: null }),
@@ -2154,16 +2272,29 @@ export const fetchMapelAuditSessionSummary = async ({
     attendanceMap.set(key, existing);
   });
 
-  const normalizedRows = rows.map((row) => {
-    const schedule = row.schedule || {};
-    const summary = attendanceMap.get(String(row.id)) || { hadir: 0, sakit: 0, izin: 0, alpha: 0, total: 0 };
-    const agenda = agendaMap.get(String(row.id)) || null;
-    const absenceTask = taskMap.get(String(row.id)) || null;
+  const normalizedRows = pagedOccurrences.map((occurrence) => {
+    const row = occurrence.session || {};
+    const schedule = occurrence.schedule || {};
+    const sessionId = row.id || null;
+    const summary = attendanceMap.get(String(sessionId || '')) || { hadir: 0, sakit: 0, izin: 0, alpha: 0, total: 0 };
+    const agenda = agendaMap.get(String(sessionId || '')) || null;
+    const absenceTask = taskMap.get(String(sessionId || '')) || null;
     const jamMulai = String(schedule.jam_mulai || '').slice(0, 5);
     const jamSelesai = String(schedule.jam_selesai || '').slice(0, 5);
 
     return {
       ...row,
+      id: occurrence.occurrence_id,
+      session_id: sessionId,
+      schedule_id: schedule.id ?? row.schedule_id ?? null,
+      schedule,
+      tanggal: occurrence.tanggal,
+      status: occurrence.statusLabel,
+      status_norm: occurrence.statusNorm,
+      attention_type: occurrence.attentionType,
+      is_virtual: occurrence.is_virtual,
+      is_late: occurrence.isLate,
+      breached: occurrence.breached,
       guru_id: schedule.guru_id ?? null,
       guru_nama: guruMap.get(String(schedule.guru_id || '')) || 'Guru',
       kelas_nama: schedule.master_kelas?.nama_kelas || '-',
@@ -2178,12 +2309,48 @@ export const fetchMapelAuditSessionSummary = async ({
     };
   });
 
+  const totalScheduled = occurrences.length;
+  const totalSessions = occurrences.filter((row) => Boolean(row.session?.id)).length;
+  const totalHadir = occurrences.filter((row) => row.statusNorm === 'hadir').length;
+  const totalLupaAbsen = occurrences.filter((row) => row.attentionType === 'lupa_absen').length;
+  const totalConfirmedAbsence = occurrences.filter((row) => row.attentionType === 'confirmed_absence').length;
+  const totalTidakMasuk = totalLupaAbsen + totalConfirmedAbsence;
+  const totalPending = occurrences.filter((row) => row.statusNorm === 'pending').length;
+  const totalLate = occurrences.filter((row) => row.isLate).length;
+  const totalMissingCheckOut = occurrences.filter((row) => row.attentionType === 'missing_checkout').length;
+  const totalBreached = occurrences.filter((row) => row.breached).length;
+  const rates = computeTeacherRates({
+    totalScheduled,
+    totalHadir,
+    totalTidakMasuk,
+    totalLate,
+  });
+
   return {
     rows: normalizedRows,
     total: totalFiltered,
     page: safePage,
     pageSize: safePageSize,
     totalPages: Math.max(1, Math.ceil(totalFiltered / safePageSize)),
+    summary: {
+      fromDate: startDate,
+      toDate: endDate,
+      monitoringStartDate: MAPEL_PERFORMANCE_START_DATE,
+      totalScheduled,
+      totalSessions,
+      totalHadir,
+      totalLupaAbsen,
+      totalConfirmedAbsence,
+      totalTidakMasuk,
+      totalPending,
+      totalLate,
+      totalMissingCheckOut,
+      presenceRate: rates.presenceRate,
+      lateRate: rates.lateRate,
+      tidakMasukRate: rates.tidakMasukRate,
+      slaBreachRate: totalScheduled > 0 ? Math.round((totalBreached / totalScheduled) * 1000) / 10 : 0,
+      roleScope: scope.isJurusanScoped ? 'jurusan' : 'global',
+    },
   };
 };
 
