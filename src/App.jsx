@@ -22,6 +22,7 @@ const AuthenticatedLayout = ({
   canAccessMapel,
   canAccessMapelAudit,
   canAccessPembiasaanWorkspace,
+  canParticipatePembiasaanAttendance,
   canViewPembiasaanReport,
   canViewExecutiveControl,
   canViewTeacherPerformance,
@@ -50,6 +51,7 @@ const AuthenticatedLayout = ({
       canAccessMapel={canAccessMapel}
       canAccessMapelAudit={canAccessMapelAudit}
       canAccessPembiasaanWorkspace={canAccessPembiasaanWorkspace}
+      canParticipatePembiasaanAttendance={canParticipatePembiasaanAttendance}
       canViewPembiasaanReport={canViewPembiasaanReport}
       canViewExecutiveControl={canViewExecutiveControl}
       canViewTeacherPerformance={canViewTeacherPerformance}
@@ -76,6 +78,7 @@ const AuthenticatedLayout = ({
       canAccessMapel={canAccessMapel}
       canAccessMapelAudit={canAccessMapelAudit}
       canAccessPembiasaanWorkspace={canAccessPembiasaanWorkspace}
+      canParticipatePembiasaanAttendance={canParticipatePembiasaanAttendance}
       canViewPembiasaanReport={canViewPembiasaanReport}
       hasMultiWorkspace={hasMultiWorkspace}
       deferredPrompt={deferredPrompt}
@@ -124,6 +127,7 @@ const App = () => {
     canAccessMapel,
     canAccessMapelAudit,
     canAccessPembiasaanWorkspace,
+    canParticipatePembiasaanAttendance,
     canViewPembiasaanReport,
     canViewExecutiveControl,
     canViewTeacherPerformance,
@@ -160,6 +164,7 @@ const App = () => {
           canAccessMapel={canAccessMapel}
           canAccessMapelAudit={canAccessMapelAudit}
           canAccessPembiasaanWorkspace={canAccessPembiasaanWorkspace}
+          canParticipatePembiasaanAttendance={canParticipatePembiasaanAttendance}
           canViewPembiasaanReport={canViewPembiasaanReport}
           canViewExecutiveControl={canViewExecutiveControl}
           canViewTeacherPerformance={canViewTeacherPerformance}

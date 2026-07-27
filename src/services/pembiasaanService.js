@@ -2,8 +2,14 @@ import { supabase } from '../supabaseClient';
 import { getSessionOrThrow } from './auth/sessionService';
 import { getTodayDateWIB } from './shared/dateService';
 import { getEvidencePolicyByStatus, isBusinessWeekdayWIBDate } from '../features/pembiasaan/utils/attendancePolicyRules';
-import { buildTeacherRecapRows } from '../features/pembiasaan/utils/executivePembiasaanReportRules';
+import {
+  buildTeacherRecapRows,
+  reconcileObligationsWithActualRows,
+  resolvePembiasaanReportPeriod,
+  summarizeTeacherRecapRows,
+} from '../features/pembiasaan/utils/executivePembiasaanReportRules';
 import { isJurusanScopedExecutiveReportRole } from '../features/pembiasaan/utils/executivePembiasaanScopeRules';
+import { isPembiasaanAttendanceRole } from '../shared/constants/roles';
 
 const ACTIVITY_TYPES = {
   SAPA: 'sapa_pagi',
@@ -100,8 +106,6 @@ const getNextDateForDay = (hari) => {
 };
 
 const toRole = (value) => String(value || '').trim().toLowerCase();
-const EXCLUDED_EXECUTIVE_REPORT_ROLES = new Set(['kepsek', 'piket', 'admin']);
-const isExcludedExecutiveRole = (roleValue) => EXCLUDED_EXECUTIVE_REPORT_ROLES.has(toRole(roleValue));
 
 const normalizeDate = (value) => String(value || '').trim();
 
@@ -269,10 +273,9 @@ export const fetchPembiasaanParticipantOptions = async () => {
   const { data, error } = await supabase
     .from('walikelas')
     .select('id, nama_lengkap, role, jurusan_id')
-    .in('role', ['guru', 'tu', 'walikelas', 'walas', 'piket', 'kepsek', 'kesiswaan', 'kaprog', 'kurikulum'])
     .order('nama_lengkap', { ascending: true });
   if (error) throw error;
-  return data || [];
+  return (data || []).filter((row) => isPembiasaanAttendanceRole(row?.role));
 };
 
 export const checkMySapaPagiAssignment = async ({ tanggal } = {}) => {
@@ -637,50 +640,70 @@ export const fetchMyPembiasaanDashboard = async ({ tanggal } = {}) => {
 
 export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activityType, status, userId } = {}) => {
   const scope = await resolveExecutiveScope();
-  await finalizePembiasaanAutoAlpha({ tanggal: toDate || getTodayDateWIB() });
+  const today = getTodayDateWIB();
+  const period = resolvePembiasaanReportPeriod({ fromDate, toDate, today });
 
-  let query = supabase
-    .from('vw_riwayat_pembiasaan_detail')
-    .select('*')
-    .order('tanggal', { ascending: false })
-    .order('created_at', { ascending: false });
+  const rowsPromise = period.isEmpty
+    ? Promise.resolve({ data: [], error: null })
+    : (() => {
+        let query = supabase
+          .from('vw_riwayat_pembiasaan_detail')
+          .select('*')
+          .gte('tanggal', period.fromDate)
+          .lte('tanggal', period.toDate)
+          .order('tanggal', { ascending: false })
+          .order('created_at', { ascending: false });
 
-  if (fromDate) query = query.gte('tanggal', fromDate);
-  if (toDate) query = query.lte('tanggal', toDate);
-  if (activityType && activityType !== 'all') query = query.eq('activity_type', activityType);
-  if (userId && userId !== 'all') query = query.eq('user_id', userId);
-  if (scope.isJurusanScoped) query = query.eq('jurusan_id_snapshot', scope.jurusanId);
+        if (activityType && activityType !== 'all') query = query.eq('activity_type', activityType);
+        if (userId && userId !== 'all') query = query.eq('user_id', userId);
+        if (scope.isJurusanScoped) query = query.eq('jurusan_id_snapshot', scope.jurusanId);
+        return query;
+      })();
 
-  const { data, error } = await query;
-  if (error) throw error;
+  const holidayPromise = period.isEmpty
+    ? Promise.resolve({ data: [], error: null })
+    : supabase
+        .from('school_calendar')
+        .select('tanggal, is_libur')
+        .gte('tanggal', period.fromDate)
+        .lte('tanggal', period.toDate);
 
-  const allRows = data || [];
-  const rows = allRows.filter((row) => !isExcludedExecutiveRole(row.role || row.role_snapshot));
-
-  const [{ data: participantsData, error: participantsError }, { data: holidaysData, error: holidaysError }] = await Promise.all([
-    fetchPembiasaanParticipantOptions().then((list) => ({ data: list, error: null })).catch((err) => ({ data: [], error: err })),
-    supabase
-      .from('school_calendar')
-      .select('tanggal, is_libur')
-      .gte('tanggal', fromDate || getTodayDateWIB())
-      .lte('tanggal', toDate || getTodayDateWIB()),
+  const [
+    { data: allRows, error },
+    { data: participantsData, error: participantsError },
+    { data: holidaysData, error: holidaysError },
+  ] = await Promise.all([
+    rowsPromise,
+    fetchPembiasaanParticipantOptions()
+      .then((list) => ({ data: list, error: null }))
+      .catch((err) => ({ data: [], error: err })),
+    holidayPromise,
   ]);
+
+  if (error) throw error;
 
   if (participantsError) throw participantsError;
   if (holidaysError) throw holidaysError;
 
-  let participants = (participantsData || []).filter((row) => !isExcludedExecutiveRole(row.role));
+  let participants = participantsData || [];
   if (scope.isJurusanScoped) {
     participants = participants.filter((row) => Number.parseInt(row.jurusan_id, 10) === scope.jurusanId);
   }
+  const participantIds = new Set(participants.map((row) => String(row.id)));
+  const rows = (allRows || []).filter((row) => participantIds.has(String(row?.user_id || '')));
 
   const holidaySet = new Set((holidaysData || []).filter((item) => item?.is_libur).map((item) => normalizeDate(item.tanggal)));
-  const dateList = enumerateDateRange(fromDate || getTodayDateWIB(), toDate || getTodayDateWIB());
+  const dateList = period.isEmpty ? [] : enumerateDateRange(period.fromDate, period.toDate);
   const activeSchoolDates = dateList.filter((item) => isBusinessWeekdayWIBDate(item) && !holidaySet.has(item));
 
   const obligationsByUserId = {};
+  const pembiasaanObligationsByUserId = {};
+  const sapaObligationsByUserId = {};
   participants.forEach((row) => {
-    obligationsByUserId[String(row.id)] = 0;
+    const id = String(row.id);
+    obligationsByUserId[id] = 0;
+    pembiasaanObligationsByUserId[id] = 0;
+    sapaObligationsByUserId[id] = 0;
   });
 
   const includePembiasaan = !activityType || activityType === 'all' || activityType === ACTIVITY_TYPES.PEMBIASAAN;
@@ -690,6 +713,7 @@ export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activit
     const pembiasaanObligation = activeSchoolDates.length;
     Object.keys(obligationsByUserId).forEach((id) => {
       obligationsByUserId[id] += pembiasaanObligation;
+      pembiasaanObligationsByUserId[id] = pembiasaanObligation;
     });
   }
 
@@ -715,7 +739,7 @@ export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activit
     (sapaScheduleRows || []).forEach((row) => {
       const day = normalizeHari(row.hari);
       const uid = String(row.user_id || '');
-      if (!uid || !userByDay[day]) return;
+      if (!uid || !participantIds.has(uid) || !userByDay[day]) return;
       userByDay[day].add(uid);
     });
 
@@ -724,30 +748,70 @@ export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activit
       const users = userByDay[dayName] || new Set();
       users.forEach((uid) => {
         obligationsByUserId[uid] = Number(obligationsByUserId[uid] || 0) + 1;
+        sapaObligationsByUserId[uid] = Number(sapaObligationsByUserId[uid] || 0) + 1;
       });
     });
   }
 
+  const pembiasaanRows = rows.filter((row) => row.activity_type === ACTIVITY_TYPES.PEMBIASAAN);
+  const sapaRows = rows.filter((row) => row.activity_type === ACTIVITY_TYPES.SAPA);
+  const reconciledPembiasaanObligations = reconcileObligationsWithActualRows({
+    rows: pembiasaanRows,
+    obligationsByUserId: pembiasaanObligationsByUserId,
+  });
+  const reconciledSapaObligations = reconcileObligationsWithActualRows({
+    rows: sapaRows,
+    obligationsByUserId: sapaObligationsByUserId,
+  });
+
+  const obligationUserIds = new Set([
+    ...Object.keys(obligationsByUserId),
+    ...Object.keys(reconciledPembiasaanObligations),
+    ...Object.keys(reconciledSapaObligations),
+  ]);
+  obligationUserIds.forEach((id) => {
+    obligationsByUserId[id] =
+      Number(reconciledPembiasaanObligations[id] || 0) + Number(reconciledSapaObligations[id] || 0);
+  });
+
   const recapRows = buildTeacherRecapRows({ rows, participants, obligationsByUserId });
+  const pembiasaanRecapRows = buildTeacherRecapRows({
+    rows: pembiasaanRows,
+    participants,
+    obligationsByUserId: reconciledPembiasaanObligations,
+  });
+  const sapaRecapRows = buildTeacherRecapRows({
+    rows: sapaRows,
+    participants,
+    obligationsByUserId: reconciledSapaObligations,
+  });
 
   const monitoringRows = rows.filter((row) => {
     if (!status || status === 'all') return true;
     return String(row.status || '').toLowerCase() === String(status).toLowerCase();
   });
 
-  const summary = rows.reduce(
-    (acc, row) => {
-      acc.total += 1;
-      if (row.activity_type === ACTIVITY_TYPES.SAPA) acc.sapa += 1;
-      if (row.activity_type === ACTIVITY_TYPES.PEMBIASAAN) acc.pembiasaan += 1;
-      if (row.status === 'hadir') acc.hadir += 1;
-      if (row.status === 'izin') acc.izin += 1;
-      if (row.status === 'sakit') acc.sakit += 1;
-      if (row.status === 'alpha') acc.alpha += 1;
-      return acc;
-    },
-    { total: 0, sapa: 0, pembiasaan: 0, hadir: 0, izin: 0, sakit: 0, alpha: 0 },
-  );
+  const recapSummary = summarizeTeacherRecapRows(recapRows);
+  const summary = {
+    total: rows.length,
+    sapa: rows.filter((row) => row.activity_type === ACTIVITY_TYPES.SAPA).length,
+    pembiasaan: rows.filter((row) => row.activity_type === ACTIVITY_TYPES.PEMBIASAAN).length,
+    hadir: recapSummary.hadir,
+    izin: recapSummary.izin,
+    sakit: recapSummary.sakit,
+    alpha: recapSummary.alpha,
+  };
+  summary.totalParticipants = recapRows.length;
+  summary.totalObligations = recapSummary.obligations;
+  summary.validReports = recapSummary.validReports;
+  summary.missingUnrecorded = recapSummary.missingUnrecorded;
+  summary.needsAttention = recapSummary.needsAttention;
+  summary.presenceRate = recapSummary.presenceRate;
+  summary.validReportRate = recapSummary.validReportRate;
+  summary.activities = {
+    pembiasaan: summarizeTeacherRecapRows(pembiasaanRecapRows),
+    sapa_pagi: summarizeTeacherRecapRows(sapaRecapRows),
+  };
 
   return {
     summary,
@@ -755,6 +819,10 @@ export const fetchExecutivePembiasaanReport = async ({ fromDate, toDate, activit
     monitoringRows,
     recapRows,
     scope: scope.isJurusanScoped ? 'jurusan' : 'global',
+    fromDate: period.fromDate,
+    toDate: period.toDate,
+    requestedFromDate: period.requestedFrom,
+    requestedToDate: period.requestedTo,
     activeDaysCount: activeSchoolDates.length,
     excludedHolidayCount: holidaySet.size,
   };

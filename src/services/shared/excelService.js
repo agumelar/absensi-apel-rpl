@@ -274,6 +274,392 @@ export const exportWorkbookWithSheets = async ({ sheets = [], fileName = 'lapora
   URL.revokeObjectURL(url);
 };
 
+export const exportPembiasaanReportToExcel = async ({
+  meta = {},
+  summary = {},
+  monitoringRows = [],
+  rankingRows = [],
+  auditRows = [],
+  fileName = 'Laporan_Pembiasaan.xlsx',
+} = {}) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Jingga Asik';
+  workbook.created = new Date();
+
+  const colors = {
+    navy: '173B66',
+    blue: '2563EB',
+    sky: 'EAF4FF',
+    violet: '6D28D9',
+    violetSoft: 'F1EAFF',
+    green: '15803D',
+    greenSoft: 'EAF8EF',
+    amber: 'B45309',
+    amberSoft: 'FFF4DB',
+    rose: 'BE123C',
+    roseSoft: 'FFE8EE',
+    slate: '475569',
+    slateSoft: 'F1F5F9',
+    border: 'D9E2EC',
+    white: 'FFFFFF',
+  };
+
+  const thinBorder = {
+    top: { style: 'thin', color: { argb: colors.border } },
+    left: { style: 'thin', color: { argb: colors.border } },
+    bottom: { style: 'thin', color: { argb: colors.border } },
+    right: { style: 'thin', color: { argb: colors.border } },
+  };
+
+  const styleTitle = (worksheet, lastColumn, title, subtitle) => {
+    worksheet.mergeCells(`A1:${lastColumn}2`);
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = title;
+    titleCell.font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: colors.white } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.navy } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    worksheet.getRow(1).height = 25;
+    worksheet.getRow(2).height = 14;
+
+    worksheet.mergeCells(`A3:${lastColumn}3`);
+    const subtitleCell = worksheet.getCell('A3');
+    subtitleCell.value = subtitle;
+    subtitleCell.font = { name: 'Aptos', size: 10, color: { argb: colors.slate } };
+    subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.slateSoft } };
+    subtitleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    worksheet.getRow(3).height = 22;
+  };
+
+  const applyWorksheetDefaults = (worksheet) => {
+    worksheet.views = [{ state: 'frozen', ySplit: 5, showGridLines: false }];
+    worksheet.properties.defaultRowHeight = 18;
+    worksheet.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+    };
+  };
+
+  const addDataSheet = ({
+    name,
+    title,
+    subtitle,
+    rows,
+    columns,
+    statusKey,
+    attentionKey,
+    sourceKey,
+  }) => {
+    const worksheet = workbook.addWorksheet(name);
+    const lastColumn = worksheet.getColumn(columns.length).letter;
+    worksheet.columns = columns.map((column) => ({
+      key: column.key,
+      width: column.width,
+    }));
+    styleTitle(worksheet, lastColumn, title, subtitle);
+
+    const headerRow = worksheet.getRow(5);
+    headerRow.values = columns.map((column) => column.label);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: colors.white } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.navy } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = thinBorder;
+    });
+
+    const safeRows = Array.isArray(rows) ? rows : [];
+    if (safeRows.length === 0) {
+      const emptyRow = worksheet.addRow(['Tidak ada data sesuai filter.']);
+      worksheet.mergeCells(emptyRow.number, 1, emptyRow.number, columns.length);
+      emptyRow.getCell(1).alignment = { horizontal: 'center' };
+      emptyRow.getCell(1).font = { italic: true, color: { argb: colors.slate } };
+    } else {
+      safeRows.forEach((item, rowIndex) => {
+        const row = worksheet.addRow(columns.map((column) => item?.[column.key] ?? '-'));
+        row.height = 21;
+        row.eachCell((cell, columnIndex) => {
+          const column = columns[columnIndex - 1];
+          cell.font = { name: 'Aptos', size: 9, color: { argb: '1F2937' } };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: column?.align || (column?.type === 'number' || column?.type === 'percent' ? 'right' : 'left'),
+            wrapText: Boolean(column?.wrap),
+          };
+          cell.border = {
+            bottom: { style: 'hair', color: { argb: colors.border } },
+          };
+          if (rowIndex % 2 === 1) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+          }
+          if (column?.type === 'number' && typeof cell.value === 'number') cell.numFmt = '#,##0.0';
+          if (column?.type === 'integer' && typeof cell.value === 'number') cell.numFmt = '#,##0';
+          if (column?.type === 'percent' && typeof cell.value === 'number') {
+            cell.value = cell.value / 100;
+            cell.numFmt = '0.0%';
+          }
+        });
+
+        if (statusKey) {
+          const statusColumnIndex = columns.findIndex((column) => column.key === statusKey) + 1;
+          const statusCell = row.getCell(statusColumnIndex);
+          const normalized = String(statusCell.value || '').toLowerCase();
+          const tone =
+            normalized === 'hadir'
+              ? { fill: colors.greenSoft, font: colors.green }
+              : normalized === 'izin'
+                ? { fill: colors.sky, font: colors.blue }
+                : normalized === 'sakit'
+                  ? { fill: colors.amberSoft, font: colors.amber }
+                  : { fill: colors.roseSoft, font: colors.rose };
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tone.fill } };
+          statusCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: tone.font } };
+          statusCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+
+        if (attentionKey) {
+          const attentionColumnIndex = columns.findIndex((column) => column.key === attentionKey) + 1;
+          const attentionCell = row.getCell(attentionColumnIndex);
+          if (Number(attentionCell.value || 0) > 0) {
+            attentionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.roseSoft } };
+            attentionCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.rose } };
+          } else {
+            attentionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.greenSoft } };
+            attentionCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.green } };
+          }
+        }
+
+        if (sourceKey) {
+          const sourceColumnIndex = columns.findIndex((column) => column.key === sourceKey) + 1;
+          const sourceCell = row.getCell(sourceColumnIndex);
+          if (String(sourceCell.value || '').toLowerCase() === 'otomatis') {
+            sourceCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.rose } };
+          }
+        }
+      });
+    }
+
+    worksheet.autoFilter = {
+      from: { row: 5, column: 1 },
+      to: { row: 5, column: columns.length },
+    };
+    applyWorksheetDefaults(worksheet);
+    return worksheet;
+  };
+
+  const summarySheet = workbook.addWorksheet('Ringkasan');
+  summarySheet.columns = [
+    { width: 20 },
+    { width: 16 },
+    { width: 18 },
+    { width: 14 },
+    { width: 14 },
+    { width: 14 },
+    { width: 14 },
+    { width: 18 },
+  ];
+  styleTitle(
+    summarySheet,
+    'H',
+    'LAPORAN PEMBIASAAN',
+    `Periode efektif ${meta.periodLabel || '-'} • Monitoring dimulai 20 Juli 2026`,
+  );
+
+  const infoValues = [
+    ['Personel Sekolah', Number(summary.totalParticipants || 0)],
+    ['Hari Aktif', Number(meta.activeDaysCount || 0)],
+    ['Hari Libur', Number(meta.excludedHolidayCount || 0)],
+    ['Filter Aktivitas', meta.activityLabel || 'Semua Aktivitas'],
+  ];
+  infoValues.forEach(([label, value], index) => {
+    const startColumn = index * 2 + 1;
+    const labelCell = summarySheet.getCell(5, startColumn);
+    const valueCell = summarySheet.getCell(5, startColumn + 1);
+    labelCell.value = label;
+    valueCell.value = value;
+    labelCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.slate } };
+    valueCell.font = { name: 'Aptos Display', size: 14, bold: true, color: { argb: colors.navy } };
+    labelCell.fill = valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.slateSoft } };
+    labelCell.border = valueCell.border = thinBorder;
+    labelCell.alignment = valueCell.alignment = { vertical: 'middle' };
+  });
+  summarySheet.getRow(5).height = 34;
+
+  const activityBlocks = [];
+  if (!meta.activityType || meta.activityType === 'all' || meta.activityType === 'pembiasaan') {
+    activityBlocks.push({
+      title: 'PEMBIASAAN HARIAN',
+      subtitle: 'Kewajiban seluruh personel pada hari aktif sekolah',
+      data: summary.activities?.pembiasaan || {},
+      color: colors.blue,
+      soft: colors.sky,
+    });
+  }
+  if (!meta.activityType || meta.activityType === 'all' || meta.activityType === 'sapa_pagi') {
+    activityBlocks.push({
+      title: 'SAPA PAGI',
+      subtitle: 'Khusus personel yang terjadwal sebagai petugas',
+      data: summary.activities?.sapa_pagi || {},
+      color: colors.violet,
+      soft: colors.violetSoft,
+    });
+  }
+
+  let activityStartRow = 7;
+  activityBlocks.forEach((block) => {
+    summarySheet.mergeCells(activityStartRow, 1, activityStartRow, 8);
+    const sectionCell = summarySheet.getCell(activityStartRow, 1);
+    sectionCell.value = `${block.title} — ${block.subtitle}`;
+    sectionCell.font = { name: 'Aptos', size: 11, bold: true, color: { argb: colors.white } };
+    sectionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: block.color } };
+    sectionCell.alignment = { vertical: 'middle' };
+    summarySheet.getRow(activityStartRow).height = 24;
+
+    const headers = [
+      'Kewajiban',
+      'Personel Berkewajiban',
+      'Sudah Melapor',
+      'Hadir',
+      'Izin',
+      'Sakit',
+      'Alpha',
+      'Belum Tercatat',
+    ];
+    const values = [
+      Number(block.data.obligations || 0),
+      Number(block.data.scheduledParticipants || 0),
+      Number(block.data.validReports || 0),
+      Number(block.data.hadir || 0),
+      Number(block.data.izin || 0),
+      Number(block.data.sakit || 0),
+      Number(block.data.alpha || 0),
+      Number(block.data.missingUnrecorded || 0),
+    ];
+    const headerRow = summarySheet.getRow(activityStartRow + 1);
+    const valueRow = summarySheet.getRow(activityStartRow + 2);
+    headerRow.values = headers;
+    valueRow.values = values;
+    headerRow.height = 28;
+    valueRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.slate } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: block.soft } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = thinBorder;
+    });
+    valueRow.eachCell((cell, columnNumber) => {
+      cell.font = {
+        name: 'Aptos Display',
+        size: 15,
+        bold: true,
+        color: {
+          argb: columnNumber === 7 || columnNumber === 8 ? colors.rose : columnNumber === 4 ? colors.green : colors.navy,
+        },
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = thinBorder;
+      cell.numFmt = '#,##0';
+    });
+    activityStartRow += 5;
+  });
+
+  summarySheet.mergeCells(activityStartRow, 1, activityStartRow, 8);
+  const guideTitle = summarySheet.getCell(activityStartRow, 1);
+  guideTitle.value = 'CARA MEMBACA';
+  guideTitle.font = { name: 'Aptos', size: 10, bold: true, color: { argb: colors.navy } };
+  guideTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.slateSoft } };
+  summarySheet.mergeCells(activityStartRow + 1, 1, activityStartRow + 2, 8);
+  const guideBody = summarySheet.getCell(activityStartRow + 1, 1);
+  guideBody.value =
+    'Sudah Melapor = Hadir + Izin + Sakit. Ditindaklanjuti = Alpha + Belum Tercatat. Petugas Sapa Pagi dapat memiliki dua kewajiban pada hari tugasnya: Sapa Pagi dan Pembiasaan Harian.';
+  guideBody.font = { name: 'Aptos', size: 10, color: { argb: colors.slate } };
+  guideBody.alignment = { vertical: 'middle', wrapText: true };
+  guideBody.border = thinBorder;
+  summarySheet.getRow(activityStartRow + 1).height = 26;
+  summarySheet.getRow(activityStartRow + 2).height = 20;
+  summarySheet.views = [{ showGridLines: false }];
+  summarySheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1,
+    margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
+
+  addDataSheet({
+    name: 'Peringkat Perhatian',
+    title: 'PERINGKAT PERHATIAN PERSONEL',
+    subtitle: `Periode ${meta.periodLabel || '-'} • Urutan berdasarkan Alpha dan data yang belum tercatat`,
+    rows: rankingRows,
+    columns: [
+      { key: 'Peringkat', label: 'Peringkat', width: 11, type: 'integer', align: 'center' },
+      { key: 'Nama', label: 'Nama Personel', width: 34 },
+      { key: 'Role', label: 'Peran', width: 17 },
+      { key: 'Hadir', label: 'Hadir', width: 10, type: 'integer', align: 'center' },
+      { key: 'Izin', label: 'Izin', width: 9, type: 'integer', align: 'center' },
+      { key: 'Sakit', label: 'Sakit', width: 9, type: 'integer', align: 'center' },
+      { key: 'Alpha', label: 'Alpha', width: 10, type: 'integer', align: 'center' },
+      { key: 'Belum Tercatat', label: 'Belum Tercatat', width: 15, type: 'integer', align: 'center' },
+      { key: 'Perlu Perhatian', label: 'Ditindaklanjuti', width: 16, type: 'integer', align: 'center' },
+      { key: 'Sudah Melapor', label: 'Sudah Melapor', width: 15, type: 'integer', align: 'center' },
+      { key: 'Kewajiban', label: 'Kewajiban', width: 13, type: 'integer', align: 'center' },
+      { key: 'Sudah Melapor (%)', label: 'Sudah Melapor (%)', width: 17, type: 'percent', align: 'center' },
+    ],
+    attentionKey: 'Perlu Perhatian',
+  });
+
+  addDataSheet({
+    name: 'Monitoring Harian',
+    title: 'MONITORING HARIAN PEMBIASAAN',
+    subtitle: `Tanggal fokus ${meta.focusDate || '-'} • ${meta.activityLabel || 'Semua Aktivitas'} • Status ${meta.statusLabel || 'Semua'}`,
+    rows: monitoringRows,
+    columns: [
+      { key: 'Tanggal', label: 'Tanggal', width: 14, align: 'center' },
+      { key: 'Aktivitas', label: 'Aktivitas', width: 18 },
+      { key: 'Nama', label: 'Nama Personel', width: 34 },
+      { key: 'Role', label: 'Peran', width: 17 },
+      { key: 'Status', label: 'Status', width: 12, align: 'center' },
+      { key: 'Jam', label: 'Jam', width: 10, align: 'center' },
+      { key: 'Jarak (m)', label: 'Jarak (m)', width: 13, type: 'number' },
+      { key: 'Sumber', label: 'Sumber Catatan', width: 16 },
+      { key: 'Catatan', label: 'Catatan', width: 32, wrap: true },
+    ],
+    statusKey: 'Status',
+    sourceKey: 'Sumber',
+  });
+
+  addDataSheet({
+    name: 'Data Audit',
+    title: 'DATA AUDIT PEMBIASAAN',
+    subtitle: `Periode ${meta.periodLabel || '-'} • Riwayat status dan bukti kegiatan`,
+    rows: auditRows,
+    columns: [
+      { key: 'Tanggal', label: 'Tanggal', width: 14 },
+      { key: 'Aktivitas', label: 'Aktivitas', width: 17 },
+      { key: 'Nama', label: 'Nama Personel', width: 32 },
+      { key: 'Status', label: 'Status', width: 11 },
+      { key: 'Jam', label: 'Jam', width: 10 },
+      { key: 'Foto', label: 'Path Foto', width: 42 },
+      { key: 'Jarak (m)', label: 'Jarak (m)', width: 12, type: 'number' },
+      { key: 'Sumber Bukti', label: 'Sumber Bukti', width: 17 },
+    ],
+    statusKey: 'Status',
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const exportMapelRecapToExcel = async ({
   meta = {},
   rows = [],

@@ -2,6 +2,8 @@ export const EXECUTIVE_ROLES = ['kepsek', 'kesiswaan', 'kaprog', 'kurikulum'];
 export const MAPEL_ACCESS_ROLES = [];
 export const MAPEL_AUDIT_ROLES = ['kepsek', 'kaprog', 'kurikulum'];
 export const PEMBIASAAN_PARTICIPANT_ROLES = [
+  'admin',
+  'kepsek',
   'guru',
   'guru_mapel',
   'tu',
@@ -9,6 +11,17 @@ export const PEMBIASAAN_PARTICIPANT_ROLES = [
   'kaprog',
   'kurikulum',
   'piket',
+  'walikelas',
+  'walas',
+];
+
+export const PEMBIASAAN_ATTENDANCE_ROLES = [
+  'guru',
+  'guru_mapel',
+  'tu',
+  'kesiswaan',
+  'kaprog',
+  'kurikulum',
   'walikelas',
   'walas',
 ];
@@ -29,3 +42,4 @@ export const isExecutiveRole = (role) => EXECUTIVE_ROLES.includes(normalizeRole(
 export const isMapelAccessRole = (role) => MAPEL_ACCESS_ROLES.includes(normalizeRole(role));
 export const isMapelAuditRole = (role) => MAPEL_AUDIT_ROLES.includes(normalizeRole(role));
 export const isPembiasaanParticipantRole = (role) => PEMBIASAAN_PARTICIPANT_ROLES.includes(normalizeRole(role));
+export const isPembiasaanAttendanceRole = (role) => PEMBIASAAN_ATTENDANCE_ROLES.includes(normalizeRole(role));

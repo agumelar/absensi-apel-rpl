@@ -10,6 +10,7 @@ import {
   isExecutiveRole,
   isMapelAuditRole,
   isMapelAccessRole,
+  isPembiasaanAttendanceRole,
   isPembiasaanParticipantRole,
   normalizeBooleanFlag,
   normalizeRole,
@@ -30,6 +31,7 @@ const useUserRoleFlags = (userData) => {
   const canAccessMapel = isMapelAccessRole(userRole) || isGuruMapel || isGuruRole;
   const canAccessMapelAudit = isMapelAuditRole(userRole);
   const canAccessPembiasaanWorkspace = isPembiasaanParticipantRole(userRole);
+  const canParticipatePembiasaanAttendance = isPembiasaanAttendanceRole(userRole);
   const canViewPembiasaanReport = isExec;
   const canAccessApelWorkspace = isAdmin || isPiket || isExec || isWalas;
   const workspaceAccessCount = [canAccessApelWorkspace, canAccessMapel, canAccessPembiasaanWorkspace].filter(Boolean).length;
@@ -62,6 +64,7 @@ const useUserRoleFlags = (userData) => {
     canAccessMapel,
     canAccessMapelAudit,
     canAccessPembiasaanWorkspace,
+    canParticipatePembiasaanAttendance,
     canViewPembiasaanReport,
     canViewExecutiveControl,
     canViewTeacherPerformance,

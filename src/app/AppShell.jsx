@@ -79,6 +79,7 @@ const AppShell = ({
   canAccessMapel,
   canAccessMapelAudit,
   canAccessPembiasaanWorkspace,
+  canParticipatePembiasaanAttendance,
   canViewPembiasaanReport,
   hasMultiWorkspace,
   deferredPrompt,
@@ -100,7 +101,6 @@ const AppShell = ({
   const isKurikulumRole = userRole === 'kurikulum';
   const showExecutiveControlMenu = isExec && !isKurikulumRole;
   const showTeacherPerformanceMenu = isExec && !isKesiswaanRole;
-
   const navMapelOperational = [
     { to: MAPEL_SCHEDULE_ROUTE, icon: BookOpen, label: 'Jadwal Mengajar' },
     { to: MAPEL_SESSION_ROUTE, icon: ClipboardCheck, label: 'Sesi & Absensi' },
@@ -242,7 +242,7 @@ const AppShell = ({
             </div>
           )}
 
-          {isPembiasaanWorkspace && canAccessPembiasaanWorkspace && (
+          {isPembiasaanWorkspace && canParticipatePembiasaanAttendance && (
             <div className="space-y-2">
               <SectionLabel>Pembiasaan · Operasional</SectionLabel>
               <div className="space-y-1">

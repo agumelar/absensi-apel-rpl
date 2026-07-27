@@ -61,6 +61,7 @@ const AppRoutes = ({
   canAccessMapel,
   canAccessMapelAudit,
   canAccessPembiasaanWorkspace,
+  canParticipatePembiasaanAttendance,
   canViewPembiasaanReport,
   canViewExecutiveControl,
   canViewTeacherPerformance,
@@ -111,7 +112,7 @@ const AppRoutes = ({
       <Route
         path={PEMBIASAAN_DASHBOARD_ROUTE}
         element={
-          <RequireRole allow={canAccessPembiasaanWorkspace}>
+          <RequireRole allow={canParticipatePembiasaanAttendance}>
             <PembiasaanDashboardPage user={userData} />
           </RequireRole>
         }
@@ -119,7 +120,7 @@ const AppRoutes = ({
       <Route
         path={PEMBIASAAN_SAPA_ROUTE}
         element={
-          <RequireRole allow={canAccessPembiasaanWorkspace}>
+          <RequireRole allow={canParticipatePembiasaanAttendance}>
             <SapaPagiPage user={userData} />
           </RequireRole>
         }
@@ -127,7 +128,7 @@ const AppRoutes = ({
       <Route
         path={PEMBIASAAN_ACTIVITY_ROUTE}
         element={
-          <RequireRole allow={canAccessPembiasaanWorkspace}>
+          <RequireRole allow={canParticipatePembiasaanAttendance}>
             <PembiasaanPage user={userData} />
           </RequireRole>
         }
