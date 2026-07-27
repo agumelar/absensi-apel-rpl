@@ -72,9 +72,28 @@ const getMonitorStatus = (item) => {
 
 const getAttentionLevel = (score) => {
   const value = Number(score || 0);
-  if (value >= 12) return { label: 'Prioritas Tinggi', tone: 'bg-rose-100 text-rose-700' };
-  if (value >= 5) return { label: 'Perlu Perhatian', tone: 'bg-amber-100 text-amber-700' };
-  return { label: 'Terpantau', tone: 'bg-emerald-100 text-emerald-700' };
+  if (value >= 12) {
+    return {
+      label: 'Prioritas Tinggi',
+      badgeTone: 'bg-rose-100 text-rose-700 dark:bg-rose-900/70 dark:text-rose-200',
+      scoreTone:
+        'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/70 dark:text-rose-200',
+    };
+  }
+  if (value >= 5) {
+    return {
+      label: 'Perlu Perhatian',
+      badgeTone: 'bg-amber-100 text-amber-700 dark:bg-amber-900/70 dark:text-amber-200',
+      scoreTone:
+        'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/70 dark:text-amber-200',
+    };
+  }
+  return {
+    label: 'Terpantau',
+    badgeTone: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-200',
+    scoreTone:
+      'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200',
+  };
 };
 
 const KpiCard = ({ icon, label, value, note, tone = 'slate' }) => {
@@ -506,7 +525,9 @@ const TeacherPerformancePage = ({ user }) => {
                   <Trophy className="text-amber-500" size={20} />
                   <h2 className="font-black text-slate-900">Peringkat Perhatian Guru</h2>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Nomor 1 memiliki akumulasi indikator perhatian tertinggi.</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Nomor 1 memiliki skor berbobot tertinggi dan menjadi prioritas peninjauan.
+                </p>
               </div>
               {loadingMonthly ? (
                 <div className="p-10 text-center">
@@ -514,7 +535,7 @@ const TeacherPerformancePage = ({ user }) => {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-sm">
+                  <table className="w-full min-w-[1040px] text-sm">
                     <thead className="bg-slate-50 text-[11px] uppercase text-slate-600">
                       <tr>
                         <th className="px-4 py-3 text-center">Peringkat</th>
@@ -525,7 +546,7 @@ const TeacherPerformancePage = ({ user }) => {
                         <th className="px-4 py-3 text-right">Terlambat</th>
                         <th className="px-4 py-3 text-right">Belum Check-out</th>
                         <th className="px-4 py-3 text-right">Kehadiran</th>
-                        <th className="px-4 py-3 text-left">Perhatian</th>
+                        <th className="min-w-[190px] px-4 py-3 text-left">Skor Perhatian</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -550,10 +571,25 @@ const TeacherPerformancePage = ({ user }) => {
                             <td className="px-4 py-3 text-right font-bold text-amber-700">{row.telat_sessions || 0}</td>
                             <td className="px-4 py-3 text-right font-bold text-amber-700">{row.missing_check_out_sessions || 0}</td>
                             <td className="px-4 py-3 text-right font-bold">{formatRate(row.presence_rate, row.total_sessions)}</td>
-                            <td className="px-4 py-3">
-                              <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${level.tone}`}>
-                                {level.label} • {row.attention_score || 0}
-                              </span>
+                            <td className="min-w-[190px] px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`inline-flex h-12 min-w-12 items-center justify-center rounded-xl border px-2 text-lg font-black ${level.scoreTone}`}
+                                  title="Skor berbobot indikator perhatian"
+                                >
+                                  {row.attention_score || 0}
+                                </span>
+                                <div className="min-w-0">
+                                  <span
+                                    className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${level.badgeTone}`}
+                                  >
+                                    {level.label}
+                                  </span>
+                                  <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                    Skor berbobot
+                                  </p>
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         );
