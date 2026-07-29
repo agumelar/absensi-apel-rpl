@@ -71,6 +71,7 @@ const ManajemenUser = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [currentId, setCurrentId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -336,11 +337,51 @@ const ManajemenUser = () => {
     });
   };
 
-  const handleDelete = async (id) => {
-    const res = await Swal.fire({ title: 'Hapus User?', text: "Permanen loh!", icon: 'warning', showCancelButton: true });
-    if (res.isConfirmed) {
-      await supabase.from('walikelas').delete().eq('id', id);
-      fetchInitialData();
+  const handleDelete = async (userItem) => {
+    const res = await Swal.fire({
+      title: 'Hapus User Permanen?',
+      text: `${userItem.nama_lengkap || userItem.username} tidak dapat dipulihkan setelah dihapus.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Hapus',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!res.isConfirmed) return;
+
+    try {
+      setDeletingId(userItem.id);
+      Swal.fire({
+        title: 'Menghapus user...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const { data, error } = await supabase
+        .from('walikelas')
+        .delete()
+        .eq('id', userItem.id)
+        .select('id');
+
+      if (error) {
+        if (error.code === '23503') {
+          throw new Error(
+            'User masih memiliki jadwal atau riwayat kegiatan. Bersihkan data terkait terlebih dahulu agar riwayat lain tidak terhapus tanpa sengaja.',
+          );
+        }
+        throw error;
+      }
+
+      if (!data?.length) {
+        throw new Error('User tidak terhapus. Periksa izin penghapusan database atau muat ulang daftar pengguna.');
+      }
+
+      await fetchInitialData();
+      await Swal.fire('Terhapus', 'Akun user berhasil dihapus permanen.', 'success');
+    } catch (err) {
+      await Swal.fire('Gagal Menghapus', err?.message || 'Terjadi kesalahan saat menghapus user.', 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -534,7 +575,15 @@ const ManajemenUser = () => {
                 </td>
                 <td className="p-6 text-right space-x-1">
                     <button onClick={() => handleEdit(u)} className="p-2 text-gray-300 hover:text-blue-500 transition-all"><Edit3 size={18} /></button>
-                    <button onClick={() => handleDelete(u.id)} className="p-2 text-gray-300 hover:text-red-500 transition-all"><Trash2 size={18} /></button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(u)}
+                      disabled={deletingId === u.id}
+                      className="p-2 text-gray-300 transition-all hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Hapus ${u.nama_lengkap || u.username}`}
+                    >
+                      {deletingId === u.id ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+                    </button>
                 </td>
               </tr>
             ))}

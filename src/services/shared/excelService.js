@@ -913,145 +913,465 @@ export const exportTeacherPerformanceToExcel = async ({
   monitorRows = [],
   historyRows = [],
   absenceRows = [],
-  sheetName = 'Rekap_Bulanan',
   fileName = 'teacher-performance.xlsx',
 } = {}) => {
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet(sheetName);
+  workbook.creator = 'Jingga Asik';
+  workbook.created = new Date();
 
-  const metadataRows = [
-    ['Periode', String(meta.periodeLabel || '-')],
-    ['Scope', String(meta.roleScopeLabel || '-')],
-    ['Trend By', String(meta.trendByLabel || '-')],
-  ];
+  const colors = {
+    navy: '173B66',
+    blue: '2563EB',
+    sky: 'EAF4FF',
+    green: '15803D',
+    greenSoft: 'EAF8EF',
+    amber: 'B45309',
+    amberSoft: 'FFF4DB',
+    rose: 'BE123C',
+    roseSoft: 'FFE8EE',
+    slate: '475569',
+    slateSoft: 'F1F5F9',
+    border: 'D9E2EC',
+    white: 'FFFFFF',
+  };
+  const thinBorder = {
+    top: { style: 'thin', color: { argb: colors.border } },
+    left: { style: 'thin', color: { argb: colors.border } },
+    bottom: { style: 'thin', color: { argb: colors.border } },
+    right: { style: 'thin', color: { argb: colors.border } },
+  };
 
-  metadataRows.forEach(([label, value]) => {
-    const row = worksheet.addRow(['', label, value]);
-    row.getCell(2).font = { bold: true };
-  });
+  const styleTitle = (worksheet, lastColumn, title, subtitle) => {
+    worksheet.mergeCells(`A1:${lastColumn}2`);
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = title;
+    titleCell.font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: colors.white } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.navy } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    worksheet.getRow(1).height = 25;
+    worksheet.getRow(2).height = 14;
 
-  worksheet.addRow([]);
-  worksheet.addRow(['', 'Presence Rate', `${summary.presenceRate || 0}%`]);
-  worksheet.addRow(['', 'Late Rate', `${summary.lateRate || 0}%`]);
-  worksheet.addRow(['', 'Tidak Masuk Rate', `${summary.tidakMasukRate || 0}%`]);
-  worksheet.addRow(['', 'Check-Out Completion Rate', `${summary.checkOutCompletionRate || 0}%`]);
-  worksheet.addRow(['', 'SLA Breach Rate', `${summary.slaBreachRate || 0}%`]);
-  worksheet.addRow(['', 'Kelas Terdampak', Number(summary.impactedClasses || 0)]);
-  worksheet.addRow([]);
+    worksheet.mergeCells(`A3:${lastColumn}3`);
+    const subtitleCell = worksheet.getCell('A3');
+    subtitleCell.value = subtitle;
+    subtitleCell.font = { name: 'Aptos', size: 10, color: { argb: colors.slate } };
+    subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.slateSoft } };
+    subtitleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    worksheet.getRow(3).height = 22;
+  };
 
-  const headerRow = worksheet.addRow([
-    'Peringkat Perhatian',
-    'Guru',
-    'Bulan',
-    'Total Sesi Terjadwal',
-    'Total Hadir',
-    'Total Terlambat',
-    'Lupa Absen',
-    'Tidak Masuk Dilaporkan',
-    'Total Tidak Check-Out',
-    'Skor Perhatian',
-    'Presence %',
-    'Late %',
-    'Tidak Masuk %',
-    'Check-Out Completion %',
-    'Kelas Terlibat',
-    'Mapel Terlibat',
-  ]);
-  headerRow.font = { bold: true };
+  const applyWorksheetDefaults = (worksheet, freezeRow = 5) => {
+    worksheet.views = [{ state: 'frozen', ySplit: freezeRow, showGridLines: false }];
+    worksheet.properties.defaultRowHeight = 18;
+    worksheet.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+    };
+  };
+
+  const getAttentionLabel = (score) => {
+    const value = Number(score || 0);
+    if (value >= 12) return 'Prioritas Tinggi';
+    if (value >= 5) return 'Perlu Perhatian';
+    return 'Terpantau';
+  };
+
+  const getStatusTone = (value) => {
+    const normalized = String(value || '').toLowerCase();
+    if (
+      normalized.includes('tepat waktu') ||
+      normalized.includes('sudah check-in') ||
+      normalized.includes('terpantau')
+    ) {
+      return { fill: colors.greenSoft, font: colors.green };
+    }
+    if (
+      normalized.includes('terlambat') ||
+      normalized.includes('menunggu') ||
+      normalized.includes('perlu perhatian')
+    ) {
+      return { fill: colors.amberSoft, font: colors.amber };
+    }
+    if (
+      normalized.includes('lupa absen') ||
+      normalized.includes('tidak masuk') ||
+      normalized.includes('belum check-in') ||
+      normalized.includes('prioritas tinggi')
+    ) {
+      return { fill: colors.roseSoft, font: colors.rose };
+    }
+    return { fill: colors.slateSoft, font: colors.slate };
+  };
+
+  const addDataSheet = ({ name, title, subtitle, rows: dataRows, columns, statusKey, attentionKey }) => {
+    const worksheet = workbook.addWorksheet(name);
+    worksheet.columns = columns.map((column) => ({ key: column.key, width: column.width }));
+    const lastColumn = worksheet.getColumn(columns.length).letter;
+    styleTitle(worksheet, lastColumn, title, subtitle);
+
+    const headerRow = worksheet.getRow(5);
+    headerRow.values = columns.map((column) => column.label);
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.white } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.navy } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = thinBorder;
+    });
+
+    const safeDataRows = Array.isArray(dataRows) ? dataRows : [];
+    if (safeDataRows.length === 0) {
+      const emptyRow = worksheet.addRow(['Tidak ada data sesuai filter.']);
+      worksheet.mergeCells(emptyRow.number, 1, emptyRow.number, columns.length);
+      emptyRow.getCell(1).alignment = { horizontal: 'center' };
+      emptyRow.getCell(1).font = { name: 'Aptos', size: 10, italic: true, color: { argb: colors.slate } };
+    } else {
+      safeDataRows.forEach((item, rowIndex) => {
+        const dataRow = worksheet.addRow(columns.map((column) => item?.[column.key] ?? '-'));
+        dataRow.height = columns.some((column) => column.wrap) ? 27 : 21;
+        dataRow.eachCell((cell, columnIndex) => {
+          const column = columns[columnIndex - 1];
+          cell.font = { name: 'Aptos', size: 9, color: { argb: '1F2937' } };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal:
+              column?.align || (['integer', 'number', 'percent'].includes(column?.type) ? 'right' : 'left'),
+            wrapText: Boolean(column?.wrap),
+          };
+          cell.border = { bottom: { style: 'hair', color: { argb: colors.border } } };
+          if (rowIndex % 2 === 1) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+          }
+          if (column?.type === 'integer' && typeof cell.value === 'number') cell.numFmt = '#,##0';
+          if (column?.type === 'number' && typeof cell.value === 'number') cell.numFmt = '#,##0.0';
+          if (column?.type === 'percent' && typeof cell.value === 'number') {
+            cell.value /= 100;
+            cell.numFmt = '0.0%';
+          }
+        });
+
+        if (statusKey) {
+          const statusColumnIndex = columns.findIndex((column) => column.key === statusKey) + 1;
+          const statusCell = dataRow.getCell(statusColumnIndex);
+          const tone = getStatusTone(statusCell.value);
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tone.fill } };
+          statusCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: tone.font } };
+          statusCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        }
+
+        if (attentionKey) {
+          const attentionColumnIndex = columns.findIndex((column) => column.key === attentionKey) + 1;
+          const attentionCell = dataRow.getCell(attentionColumnIndex);
+          const tone = getStatusTone(attentionCell.value);
+          attentionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tone.fill } };
+          attentionCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: tone.font } };
+          attentionCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        }
+      });
+    }
+
+    worksheet.autoFilter = {
+      from: { row: 5, column: 1 },
+      to: { row: 5, column: columns.length },
+    };
+    applyWorksheetDefaults(worksheet);
+    return worksheet;
+  };
 
   const safeRows = Array.isArray(rows) ? rows : [];
-  const bulanLabel = String(meta.bulanLabel || meta.periodeLabel || '-');
-  safeRows.forEach((row, index) => {
-    worksheet.addRow([
-      index + 1,
-      row.guru_nama || '-',
-      bulanLabel,
-      Number(row.total_sessions || 0),
-      Number(row.hadir_sessions || 0),
-      Number(row.telat_sessions || 0),
-      Number(row.lupa_absen_sessions || 0),
-      Number(row.confirmed_absence_sessions || 0),
-      Number(row.missing_check_out_sessions || 0),
-      Number(row.attention_score || 0),
-      Number(row.presence_rate || 0),
-      Number(row.late_rate || 0),
-      Number(row.tidak_masuk_rate || 0),
-      Number(row.check_out_rate || 0),
-      row.kelas_terakhir || '-',
-      row.mapel_terakhir || '-',
-    ]);
+  const safeMonitorRows = Array.isArray(monitorRows) ? monitorRows : [];
+  const safeHistoryRows = Array.isArray(historyRows) ? historyRows : [];
+  const safeAbsenceRows = Array.isArray(absenceRows) ? absenceRows : [];
+
+  const summarySheet = workbook.addWorksheet('Ringkasan');
+  summarySheet.columns = Array.from({ length: 8 }, () => ({ width: 18 }));
+  styleTitle(
+    summarySheet,
+    'H',
+    'LAPORAN KINERJA KEHADIRAN GURU',
+    `Periode efektif ${meta.periodeLabel || '-'} • ${meta.roleScopeLabel || '-'}`,
+  );
+
+  [
+    ['Guru Dinilai', Number(summary.totalTeachers || safeRows.length || 0)],
+    ['Jadwal Dinilai', Number(summary.totalScheduled || 0)],
+    ['Kelas Terdampak', Number(summary.impactedClasses || 0)],
+    ['Bulan Laporan', String(meta.bulanLabel || '-')],
+  ].forEach(([label, value], index) => {
+    const startColumn = index * 2 + 1;
+    const labelCell = summarySheet.getCell(5, startColumn);
+    const valueCell = summarySheet.getCell(5, startColumn + 1);
+    labelCell.value = label;
+    valueCell.value = value;
+    labelCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.slate } };
+    valueCell.font = { name: 'Aptos Display', size: 14, bold: true, color: { argb: colors.navy } };
+    labelCell.fill = valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.slateSoft } };
+    labelCell.border = valueCell.border = thinBorder;
+    labelCell.alignment = valueCell.alignment = { vertical: 'middle' };
+  });
+  summarySheet.getRow(5).height = 34;
+
+  summarySheet.mergeCells('A7:H7');
+  const countSection = summarySheet.getCell('A7');
+  countSection.value = 'HASIL MONITORING';
+  countSection.font = { name: 'Aptos', size: 11, bold: true, color: { argb: colors.white } };
+  countSection.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.blue } };
+  countSection.alignment = { vertical: 'middle' };
+  const countHeaders = ['Jadwal', 'Hadir', 'Lupa Absen', 'Tidak Masuk Dilaporkan', 'Lewat SLA', 'Terlambat', 'Belum Check-Out', 'Sesi Tercatat'];
+  const countValues = [
+    Number(summary.totalScheduled || 0),
+    Number(summary.totalHadir || 0),
+    Number(summary.totalLupaAbsen || 0),
+    Number(summary.totalConfirmedAbsence || 0),
+    Number(
+      summary.totalSlaBreach ||
+        safeRows.reduce((total, row) => total + Number(row.sla_breach_sessions || 0), 0),
+    ),
+    Number(summary.totalLate || 0),
+    Number(summary.totalMissingCheckOut || 0),
+    Number(summary.totalSessions || 0),
+  ];
+  summarySheet.getRow(8).values = countHeaders;
+  summarySheet.getRow(9).values = countValues;
+  summarySheet.getRow(8).height = 30;
+  summarySheet.getRow(9).height = 32;
+  summarySheet.getRow(8).eachCell((cell) => {
+    cell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.slate } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.sky } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = thinBorder;
+  });
+  summarySheet.getRow(9).eachCell((cell, columnNumber) => {
+    const attentionColumns = [3, 4, 5, 6, 7];
+    cell.font = {
+      name: 'Aptos Display',
+      size: 15,
+      bold: true,
+      color: { argb: attentionColumns.includes(columnNumber) ? colors.rose : columnNumber === 2 ? colors.green : colors.navy },
+    };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = thinBorder;
+    cell.numFmt = '#,##0';
   });
 
-  const monitorSheet = workbook.addWorksheet('Monitor_Hari_Ini');
-  monitorSheet.addRow(['Tanggal', 'Jam', 'Guru', 'Kelas', 'Mapel', 'Status SLA', 'Check-In', 'Check-Out', 'Topik', 'Metode', 'H', 'S', 'I', 'A']);
-  monitorSheet.getRow(1).font = { bold: true };
-  (Array.isArray(monitorRows) ? monitorRows : []).forEach((item) => {
-    monitorSheet.addRow([
-      item.tanggal || '-',
-      item.jam_label || '-',
-      item.guru_nama || '-',
-      item.kelas_nama || '-',
-      item.mapel_nama || '-',
-      item.sla_label || '-',
-      formatHourMinuteWIB(item.waktu_check_in),
-      formatHourMinuteWIB(item.waktu_check_out),
-      item.agenda_topik || '-',
-      item.agenda_metode || '-',
-      Number(item.hadir || item.attendance_summary?.hadir || 0),
-      Number(item.sakit || item.attendance_summary?.sakit || 0),
-      Number(item.izin || item.attendance_summary?.izin || 0),
-      Number(item.alpha || item.attendance_summary?.alpha || 0),
-    ]);
+  summarySheet.mergeCells('A11:H11');
+  const rateSection = summarySheet.getCell('A11');
+  rateSection.value = 'TINGKAT KEPATUHAN';
+  rateSection.font = { name: 'Aptos', size: 11, bold: true, color: { argb: colors.white } };
+  rateSection.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
+  rateSection.alignment = { vertical: 'middle' };
+  const rateHeaders = ['Kehadiran', 'Terlambat', 'Tidak Masuk', 'Check-Out Selesai', 'Lewat SLA'];
+  const rateValues = [
+    Number(summary.presenceRate || 0) / 100,
+    Number(summary.lateRate || 0) / 100,
+    Number(summary.tidakMasukRate || 0) / 100,
+    Number(summary.checkOutCompletionRate || 0) / 100,
+    Number(summary.slaBreachRate || 0) / 100,
+  ];
+  summarySheet.getRow(12).values = rateHeaders;
+  summarySheet.getRow(13).values = rateValues;
+  summarySheet.getRow(12).height = 28;
+  summarySheet.getRow(13).height = 30;
+  summarySheet.getRow(12).eachCell((cell) => {
+    cell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: colors.slate } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.greenSoft } };
+    cell.border = thinBorder;
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
-  if ((Array.isArray(monitorRows) ? monitorRows : []).length === 0) {
-    monitorSheet.addRow(['Belum ada data monitor untuk export ini']);
-  }
+  summarySheet.getRow(13).eachCell((cell) => {
+    cell.font = { name: 'Aptos Display', size: 14, bold: true, color: { argb: colors.navy } };
+    cell.numFmt = '0.0%';
+    cell.border = thinBorder;
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
 
-  const historySheet = workbook.addWorksheet('Riwayat_Detail');
-  historySheet.addRow(['Tanggal', 'Guru', 'Kelas', 'Mapel', 'Status', 'Check-In', 'Check-Out', 'Topik', 'Metode']);
-  historySheet.getRow(1).font = { bold: true };
-  (Array.isArray(historyRows) ? historyRows : []).forEach((item) => {
-    historySheet.addRow([
-      item.tanggal || '-',
-      item.guru_nama || '-',
-      item.kelas_nama || '-',
-      item.mapel_nama || '-',
-      item.status || '-',
-      formatHourMinuteWIB(item.waktu_check_in),
-      formatHourMinuteWIB(item.waktu_check_out),
-      item.agenda_topik || '-',
-      item.agenda_metode || '-',
-    ]);
-  });
-  if ((Array.isArray(historyRows) ? historyRows : []).length === 0) {
-    historySheet.addRow(['Belum ada data riwayat untuk export ini']);
-  }
+  summarySheet.mergeCells('A15:H15');
+  const guideTitle = summarySheet.getCell('A15');
+  guideTitle.value = 'CARA MEMBACA';
+  guideTitle.font = { name: 'Aptos', size: 10, bold: true, color: { argb: colors.navy } };
+  guideTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.slateSoft } };
+  summarySheet.mergeCells('A16:H18');
+  const guideBody = summarySheet.getCell('A16');
+  guideBody.value =
+    'Peringkat 1 adalah guru yang paling perlu ditinjau untuk pembinaan internal. Skor Perhatian = Lupa Absen ×4 + Lewat SLA ×3 + Terlambat ×2 + Tidak Masuk Dilaporkan ×2 + Belum Check-Out ×1. Lupa Absen berarti jadwal selesai tanpa sesi/check-in; berbeda dari Tidak Masuk Dilaporkan. ' +
+    (meta.holidayPolicyLabel || 'Hari libur dan jadwal yang belum dimulai tidak dinilai.');
+  guideBody.font = { name: 'Aptos', size: 10, color: { argb: colors.slate } };
+  guideBody.alignment = { vertical: 'middle', wrapText: true };
+  guideBody.border = thinBorder;
+  summarySheet.getRow(16).height = 28;
+  summarySheet.getRow(17).height = 24;
+  summarySheet.getRow(18).height = 24;
+  summarySheet.views = [{ showGridLines: false }];
+  summarySheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1,
+    margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
 
-  const absenceSheet = workbook.addWorksheet('Guru_Tidak_Masuk_Detail');
-  absenceSheet.addRow([
-    'Tanggal Tidak Masuk',
-    'Nama Guru',
-    'Kelas',
-    'Mapel',
-    'Instruksi Tugas',
-    'Delivered oleh Piket',
-    'Waktu Delivered',
-  ]);
-  absenceSheet.getRow(1).font = { bold: true };
-  (Array.isArray(absenceRows) ? absenceRows : []).forEach((item) => {
-    absenceSheet.addRow([
-      item.tanggal || '-',
-      item.guru_nama || '-',
-      item.kelas_nama || '-',
-      item.mapel_nama || '-',
-      item.instruksi || item.absence_task?.instruksi || '-',
-      item.delivered_by_picket ? 'Ya' : 'Tidak',
-      formatHourMinuteWIB(item.delivered_at),
-    ]);
+  addDataSheet({
+    name: 'Peringkat Perhatian',
+    title: 'PERINGKAT PERHATIAN GURU',
+    subtitle: `Periode ${meta.periodeLabel || '-'} • Peringkat 1 paling perlu ditinjau`,
+    rows: safeRows.map((row, index) => ({
+      peringkat: index + 1,
+      guru: row.guru_nama || '-',
+      prioritas: getAttentionLabel(row.attention_score),
+      skor: Number(row.attention_score || 0),
+      jadwal: Number(row.total_sessions || 0),
+      hadir: Number(row.hadir_sessions || 0),
+      lupaAbsen: Number(row.lupa_absen_sessions || 0),
+      tidakMasuk: Number(row.confirmed_absence_sessions || 0),
+      lewatSla: Number(row.pending_sessions || 0) > 0 ? Number(row.sla_breach_sessions || 0) : 0,
+      terlambat: Number(row.telat_sessions || 0),
+      belumCheckOut: Number(row.missing_check_out_sessions || 0),
+      kehadiran: Number(row.presence_rate || 0),
+      terlambatRate: Number(row.late_rate || 0),
+      checkOutRate: row.check_out_rate == null ? '-' : Number(row.check_out_rate || 0),
+      kelas: row.kelas_terakhir || '-',
+      mapel: row.mapel_terakhir || '-',
+    })),
+    columns: [
+      { key: 'peringkat', label: 'Peringkat', width: 10, type: 'integer', align: 'center' },
+      { key: 'guru', label: 'Nama Guru', width: 34 },
+      { key: 'prioritas', label: 'Prioritas', width: 18, align: 'center' },
+      { key: 'skor', label: 'Skor Perhatian', width: 15, type: 'integer', align: 'center' },
+      { key: 'jadwal', label: 'Jadwal Dinilai', width: 14, type: 'integer', align: 'center' },
+      { key: 'hadir', label: 'Hadir', width: 10, type: 'integer', align: 'center' },
+      { key: 'lupaAbsen', label: 'Lupa Absen', width: 13, type: 'integer', align: 'center' },
+      { key: 'tidakMasuk', label: 'Tidak Masuk Dilaporkan', width: 18, type: 'integer', align: 'center' },
+      { key: 'lewatSla', label: 'Lewat SLA (Skor)', width: 14, type: 'integer', align: 'center' },
+      { key: 'terlambat', label: 'Terlambat', width: 12, type: 'integer', align: 'center' },
+      { key: 'belumCheckOut', label: 'Belum Check-Out', width: 16, type: 'integer', align: 'center' },
+      { key: 'kehadiran', label: 'Kehadiran (%)', width: 14, type: 'percent', align: 'center' },
+      { key: 'terlambatRate', label: 'Terlambat (%)', width: 14, type: 'percent', align: 'center' },
+      { key: 'checkOutRate', label: 'Check-Out Selesai (%)', width: 18, type: 'percent', align: 'center' },
+      { key: 'kelas', label: 'Kelas Terakhir', width: 16 },
+      { key: 'mapel', label: 'Mapel Terakhir', width: 34, wrap: true },
+    ],
+    attentionKey: 'prioritas',
   });
-  if ((Array.isArray(absenceRows) ? absenceRows : []).length === 0) {
-    absenceSheet.addRow(['Belum ada data guru tidak masuk untuk export ini']);
-  }
+
+  addDataSheet({
+    name: 'Monitoring Hari Ini',
+    title: 'MONITORING KEGIATAN HARI INI',
+    subtitle: 'Status jadwal, check-in, check-out, agenda pembelajaran, dan rekap kehadiran siswa',
+    rows: safeMonitorRows.map((item) => ({
+      tanggal: item.tanggal || '-',
+      jadwal:
+        item.jam_label ||
+        (item.jam_mulai && item.jam_selesai
+          ? `${String(item.jam_mulai).slice(0, 5)}-${String(item.jam_selesai).slice(0, 5)}`
+          : '-'),
+      guru: item.guru_nama || '-',
+      kelas: item.kelas_nama || '-',
+      mapel: item.mapel_nama || '-',
+      status: item.monitor_status?.label || item.warning_label || item.sla_label || '-',
+      checkIn: formatHourMinuteWIB(item.waktu_check_in),
+      checkOut: formatHourMinuteWIB(item.waktu_check_out),
+      topik: item.agenda_topik || '-',
+      metode: item.agenda_metode || '-',
+      hadir: Number(item.hadir || item.attendance_summary?.hadir || 0),
+      sakit: Number(item.sakit || item.attendance_summary?.sakit || 0),
+      izin: Number(item.izin || item.attendance_summary?.izin || 0),
+      alpha: Number(item.alpha || item.attendance_summary?.alpha || 0),
+    })),
+    columns: [
+      { key: 'tanggal', label: 'Tanggal', width: 14, align: 'center' },
+      { key: 'jadwal', label: 'Jadwal', width: 14, align: 'center' },
+      { key: 'guru', label: 'Nama Guru', width: 31 },
+      { key: 'kelas', label: 'Kelas', width: 14 },
+      { key: 'mapel', label: 'Mata Pelajaran', width: 30, wrap: true },
+      { key: 'status', label: 'Status', width: 24, align: 'center', wrap: true },
+      { key: 'checkIn', label: 'Check-In', width: 12, align: 'center' },
+      { key: 'checkOut', label: 'Check-Out', width: 12, align: 'center' },
+      { key: 'topik', label: 'Agenda Pembelajaran', width: 34, wrap: true },
+      { key: 'metode', label: 'Metode', width: 18, wrap: true },
+      { key: 'hadir', label: 'H', width: 7, type: 'integer', align: 'center' },
+      { key: 'sakit', label: 'S', width: 7, type: 'integer', align: 'center' },
+      { key: 'izin', label: 'I', width: 7, type: 'integer', align: 'center' },
+      { key: 'alpha', label: 'A', width: 7, type: 'integer', align: 'center' },
+    ],
+    statusKey: 'status',
+  });
+
+  addDataSheet({
+    name: 'Riwayat Kegiatan',
+    title: 'RIWAYAT KEGIATAN PEMBELAJARAN',
+    subtitle: `Periode ${meta.periodeLabel || '-'} • Bukti pelaksanaan KBM dan indikator yang perlu ditinjau`,
+    rows: safeHistoryRows.map((item) => ({
+      tanggal: item.tanggal || '-',
+      jadwal: item.jam_label || '-',
+      guru: item.guru_nama || '-',
+      kelas: item.kelas_nama || '-',
+      mapel: item.mapel_nama || '-',
+      status: item.status || '-',
+      checkIn: formatHourMinuteWIB(item.waktu_check_in),
+      checkOut: formatHourMinuteWIB(item.waktu_check_out),
+      topik: item.agenda_topik || '-',
+      metode: item.agenda_metode || '-',
+      hadir: Number(item.attendance_summary?.hadir || 0),
+      sakit: Number(item.attendance_summary?.sakit || 0),
+      izin: Number(item.attendance_summary?.izin || 0),
+      alpha: Number(item.attendance_summary?.alpha || 0),
+    })),
+    columns: [
+      { key: 'tanggal', label: 'Tanggal', width: 14, align: 'center' },
+      { key: 'jadwal', label: 'Jadwal', width: 14, align: 'center' },
+      { key: 'guru', label: 'Nama Guru', width: 31 },
+      { key: 'kelas', label: 'Kelas', width: 14 },
+      { key: 'mapel', label: 'Mata Pelajaran', width: 30, wrap: true },
+      { key: 'status', label: 'Status Kehadiran', width: 24, align: 'center', wrap: true },
+      { key: 'checkIn', label: 'Check-In', width: 12, align: 'center' },
+      { key: 'checkOut', label: 'Check-Out', width: 12, align: 'center' },
+      { key: 'topik', label: 'Agenda Pembelajaran', width: 34, wrap: true },
+      { key: 'metode', label: 'Metode', width: 18, wrap: true },
+      { key: 'hadir', label: 'H', width: 7, type: 'integer', align: 'center' },
+      { key: 'sakit', label: 'S', width: 7, type: 'integer', align: 'center' },
+      { key: 'izin', label: 'I', width: 7, type: 'integer', align: 'center' },
+      { key: 'alpha', label: 'A', width: 7, type: 'integer', align: 'center' },
+    ],
+    statusKey: 'status',
+  });
+
+  addDataSheet({
+    name: 'Detail Ketidakhadiran',
+    title: 'DETAIL KETIDAKHADIRAN GURU',
+    subtitle: `Periode ${meta.periodeLabel || '-'} • Pisahkan lupa absen dari ketidakhadiran yang dilaporkan`,
+    rows: safeAbsenceRows.map((item) => {
+      const task = item.absence_task || {};
+      const isReported = String(item.attention_type || '') === 'confirmed_absence';
+      return {
+        tanggal: item.tanggal || '-',
+        guru: item.guru_nama || '-',
+        kelas: item.kelas_nama || '-',
+        mapel: item.mapel_nama || '-',
+        jenis: isReported ? 'Tidak Masuk Dilaporkan' : 'Lupa Absen / Tidak Absen',
+        instruksi: item.instruksi || task.instruksi || '-',
+        distribusi: !isReported
+          ? 'Tidak Berlaku'
+          : task.delivered_by_picket || item.delivered_by_picket
+            ? 'Sudah Didistribusikan'
+            : 'Belum Didistribusikan',
+        waktuDistribusi: formatHourMinuteWIB(task.delivered_at || item.delivered_at),
+      };
+    }),
+    columns: [
+      { key: 'tanggal', label: 'Tanggal', width: 14, align: 'center' },
+      { key: 'guru', label: 'Nama Guru', width: 32 },
+      { key: 'kelas', label: 'Kelas', width: 14 },
+      { key: 'mapel', label: 'Mata Pelajaran', width: 31, wrap: true },
+      { key: 'jenis', label: 'Jenis Catatan', width: 24, align: 'center', wrap: true },
+      { key: 'instruksi', label: 'Instruksi / Tugas', width: 42, wrap: true },
+      { key: 'distribusi', label: 'Status Distribusi', width: 22, align: 'center', wrap: true },
+      { key: 'waktuDistribusi', label: 'Waktu Distribusi', width: 17, align: 'center' },
+    ],
+    statusKey: 'jenis',
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
